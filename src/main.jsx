@@ -1275,6 +1275,41 @@ button:disabled {
   letter-spacing: 5px;
 }
 
+.message-row {
+  display: flex;
+  width: 100%;
+  margin: 14px 0;
+}
+
+.user-row {
+  justify-content: flex-end;
+}
+
+.ai-row {
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  max-width: 75%;
+  padding: 13px 17px;
+  border-radius: 18px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.user-bubble {
+  background: #e9dfcf;
+  color: #332719;
+  border-bottom-right-radius: 5px;
+}
+
+.ai-bubble {
+  background: #f8f5ef;
+  color: #332719;
+  border: 1px solid #e9e1d5;
+  border-bottom-left-radius: 5px;
+}
+
 .splash .logo-mark {
   width: 60px;
   height: 60px;
@@ -2346,7 +2381,7 @@ function Chat() {
 
               supabaseAccessToken: session.access_token,
 
-              conversationId: serverId || currentId,
+              conversationId: serverId || null,
 
               messages: nextMessages
 
@@ -2429,10 +2464,15 @@ function Chat() {
         );
       }
 
-      const remoteConversationId =
-        result.conversationId || serverId || currentId;
+      const remoteConversationId = result.conversationId;
 
-      setServerId(remoteConversationId);
+if (!remoteConversationId) {
+  throw new Error(
+    'Backend did not return a valid conversation ID.'
+  );
+}
+
+setServerId(remoteConversationId);
 
       const finalMessages = [
         ...nextMessages,
@@ -3443,8 +3483,15 @@ createRoot(
   document.getElementById('root')
 ).render(
 
-  <BrowserRouter>
+
+  
+  <><BrowserRouter>
     <App />
   </BrowserRouter>
+  <div className={`message-row ${message.role === "user" ? "user-row" : "ai-row"}`}>
+      <div className={`message-bubble ${message.role === "user" ? "user-bubble" : "ai-bubble"}`}>
+        {message.content}
+      </div>
+    </div></>
 
 );
