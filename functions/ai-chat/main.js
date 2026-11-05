@@ -216,7 +216,9 @@ export default async ({ req, res, log, error }) => {
           responseData?.message ||
           `Appwrite request failed with HTTP ${response.status}`;
 
-        throw new Error(message);
+        throw new Error(
+  `Appwrite HTTP ${response.status}: ${message} | ${path}`
+);
       }
 
       return responseData;
