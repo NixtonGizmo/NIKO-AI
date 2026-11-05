@@ -833,10 +833,18 @@ function Chat(){
   const [messages,setMessages]=useState([]);
   const [input,setInput]=useState('');
   const [busy,setBusy]=useState(false);
+  const [conversationId,setConversationId]=useState('');
+
+  const {user:authUser}=useAuth();
 
   async function send(){
 
     if(!input.trim()||busy)return;
+
+    if(!authUser?.id){
+      setMessages(m=>[...m,{role:'assistant',content:'Niko connection error: You must be signed in.'}]);
+      return;
+    }
 
     const text=input.trim();
     setInput('');
@@ -888,7 +896,7 @@ function Chat(){
 
           body: JSON.stringify({
           body: JSON.stringify({
-           userId: user.id,
+           userId: authUser.id,
            conversationId: conversationId || '',
            messages: nextMessages
         })
@@ -917,6 +925,7 @@ function Chat(){
       }
 
       let out='';
+      let returnedConversationId='';
 
       /*
        * Appwrite execution normally returns:
@@ -937,6 +946,10 @@ function Chat(){
           out=
             body?.content ||
             body?.message ||
+            '';
+
+          returnedConversationId=
+            body?.conversationId ||
             '';
 
         }catch{
