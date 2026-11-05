@@ -837,198 +837,201 @@ function Chat(){
 
   const {user:authUser}=useAuth();
 
-  async function send(){
+ 
+async function send() {
+  if (!input.trim() || busy) return;
 
-    if(!input.trim()||busy)return;
+  if (!authUser?.id) {
+    setMessages(m => [
+      ...m,
+      {
+        role: 'assistant',
+        content: 'Niko connection error: You must be signed in.'
+      }
+    ]);
+    return;
+  }
 
-    if(!authUser?.id){
-      setMessages(m=>[...m,{role:'assistant',content:'Niko connection error: You must be signed in.'}]);
-      return;
+  const text = input.trim();
+  setInput('');
+
+  const nextMessages = [
+    ...messages,
+    {
+      role: 'user',
+      content: text
+    }
+  ];
+
+  setMessages(nextMessages);
+  setBusy(true);
+
+  try {
+    const endpoint =
+      import.meta.env.VITE_APPWRITE_ENDPOINT ||
+      'https://sgp.cloud.appwrite.io/v1';
+
+    const functionId =
+      import.meta.env.VITE_APPWRITE_AI_FUNCTION_ID ||
+      'niko_ai_api';
+
+    const projectId =
+      import.meta.env.VITE_APPWRITE_PROJECT_ID;
+
+    if (!projectId) {
+      throw new Error('VITE_APPWRITE_PROJECT_ID is missing in .env');
     }
 
-    const text=input.trim();
-    setInput('');
+    // Get current Supabase session
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
 
-    const nextMessages=[
-      ...messages,
+    if (sessionError || !session?.access_token) {
+      throw new Error('Your login session has expired. Please log in again.');
+    }
+
+    console.log('NIKO REQUEST:', {
+      endpoint,
+      functionId,
+      conversationId
+    });
+
+    // Execute Appwrite Function
+    const r = await fetch(
+      `${endpoint}/functions/${functionId}/executions`,
       {
-        role:'user',
-        content:text
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Appwrite-Project': projectId
+        },
+        body: JSON.stringify({
+          body: JSON.stringify({
+            supabaseAccessToken: session.access_token,
+            conversationId: conversationId || '',
+            messages: nextMessages
+          }),
+          async: false
+        })
       }
-    ];
+    );
 
-    setMessages(nextMessages);
-    setBusy(true);
+    let execution = {};
 
-    try{
+    try {
+      execution = await r.json();
+    } catch {
+      throw new Error('Appwrite returned an invalid execution response.');
+    }
 
-      const endpoint=
-        import.meta.env.VITE_APPWRITE_ENDPOINT ||
-        'https://sgp.cloud.appwrite.io/v1';
+    console.log('NIKO EXECUTION:', execution);
 
-      const functionId=
-        import.meta.env.VITE_APPWRITE_AI_FUNCTION_ID ||
-        'niko_ai_api';
+    if (!r.ok) {
+      throw new Error(
+        execution.message ||
+        execution.error ||
+        `Appwrite HTTP ${r.status}`
+      );
+    }
 
-      const projectId=
-        import.meta.env.VITE_APPWRITE_PROJECT_ID;
+    // Check execution status
+    console.log('NIKO STATUS:', execution.status);
+    console.log('NIKO RESPONSE STATUS:', execution.responseStatusCode);
+    console.log('NIKO STDERR:', execution.stderr);
 
-      if(!projectId){
-        throw new Error(
-          'VITE_APPWRITE_PROJECT_ID is missing in .env'
-        );
+    if (execution.status === 'failed') {
+      throw new Error(
+        execution.stderr ||
+        execution.responseBody ||
+        'Niko Function execution failed.'
+      );
+    }
+
+    // Get Function response body
+    const responseBody = execution.responseBody;
+
+    if (!responseBody) {
+      throw new Error(
+        `Function returned an empty response. Execution status: ${
+          execution.status || 'unknown'
+        }. Check Appwrite Function logs.`
+      );
+    }
+
+    let result;
+
+    try {
+      result =
+        typeof responseBody === 'string'
+          ? JSON.parse(responseBody)
+          : responseBody;
+    } catch {
+      throw new Error(
+        'Invalid JSON from Niko Function: ' + responseBody
+      );
+    }
+
+    console.log('NIKO RESULT:', result);
+
+    // Check Function response status
+    if (
+      execution.responseStatusCode &&
+      execution.responseStatusCode >= 400
+    ) {
+      throw new Error(
+        result?.error ||
+        result?.message ||
+        `Niko Function HTTP ${execution.responseStatusCode}`
+      );
+    }
+
+    // Get AI response
+    const out =
+      result?.content ||
+      result?.message ||
+      '';
+
+    if (!out) {
+      throw new Error(
+        result?.error ||
+        'Niko Function returned no AI message.'
+      );
+    }
+
+    // Save conversation ID for future messages
+    if (result.conversationId) {
+      setConversationId(result.conversationId);
+    }
+
+    // Display assistant response
+    setMessages(m => [
+      ...m,
+      {
+        role: 'assistant',
+        content: String(out)
       }
+    ]);
 
-      console.log('NIKO REQUEST:',{
-        endpoint,
-        functionId
-      });
+  } catch (e) {
+    console.error('NIKO CHAT ERROR:', e);
 
-      const { data: { session }, error: sessionError } =
-  await supabase.auth.getSession();
+    setMessages(m => [
+      ...m,
+      {
+        role: 'assistant',
+        content: `Niko connection error: ${
+          e?.message || 'Unknown error'
+        }`
+      }
+    ]);
 
-if (sessionError || !session?.access_token) {
-  throw new Error('Your login session has expired. Please log in again.');
+  } finally {
+    setBusy(false);
+  }
 }
 
-const r = await fetch(
-  `${endpoint}/functions/${functionId}/executions`,
-  {
-    method: 'POST',
-
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Appwrite-Project': projectId
-    },
-
-    body: JSON.stringify({
-      body: JSON.stringify({
-        supabaseAccessToken: session.access_token,
-        conversationId: conversationId || '',
-        messages: nextMessages
-      }),
-      async: false
-    })
-  }
-);
-
-      let data={};
-
-      try{
-        data=await r.json();
-      }catch{
-        data={};
-      }
-
-      console.log('NIKO APPWRITE RESPONSE:',data);
-
-      if(!r.ok){
-
-        throw new Error(
-          data?.message ||
-          data?.error ||
-          data?.responseBody ||
-          `Appwrite HTTP ${r.status}`
-        );
-      }
-
-      let out='';
-      let returnedConversationId='';
-
-      /*
-       * Appwrite execution normally returns:
-       *
-       * responseBody: "{\"content\":\"Hello...\"}"
-       *
-       * So first parse responseBody.
-       */
-      if(data?.responseBody){
-
-        try{
-
-          const body=
-            typeof data.responseBody==='string'
-              ? JSON.parse(data.responseBody)
-              : data.responseBody;
-
-          out=
-            body?.content ||
-            body?.message ||
-            '';
-
-          returnedConversationId=
-            body?.conversationId ||
-            '';
-
-        }catch{
-
-          /*
-           * If responseBody itself is plain text
-           */
-          out=String(data.responseBody);
-
-        }
-      }
-
-      /*
-       * Additional fallback response formats
-       */
-      if(!out){
-
-        out=
-          data?.content ||
-          data?.message ||
-          '';
-      }
-
-      /*
-       * If Appwrite returned no body
-       */
-      if(!out){
-
-        console.error(
-          'NIKO EMPTY APPWRITE RESPONSE:',
-          data
-        );
-
-        throw new Error(
-          'Appwrite Function returned no response.'
-        );
-      }
-
-      setMessages(m=>[
-        ...m,
-        {
-          role:'assistant',
-          content:String(out)
-        }
-      ]);
-
-    }catch(e){
-
-      console.error(
-        'NIKO CHAT ERROR:',
-        e
-      );
-
-      setMessages(m=>[
-        ...m,
-        {
-          role:'assistant',
-          content:
-            `Niko connection error: ${
-              e?.message ||
-              'Unknown error'
-            }`
-        }
-      ]);
-
-    }finally{
-
-      setBusy(false);
-
-    }
-  }
 
   function copyMessage(content){
 
