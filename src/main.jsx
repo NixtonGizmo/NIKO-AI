@@ -884,24 +884,33 @@ function Chat(){
         functionId
       });
 
-      const r=await fetch(
-        `${endpoint}/functions/${functionId}/executions`,
-        {
-          method:'POST',
+      const { data: { session }, error: sessionError } =
+  await supabase.auth.getSession();
 
-          headers:{
-            'Content-Type':'application/json',
-            'X-Appwrite-Project':projectId
-          },
+if (sessionError || !session?.access_token) {
+  throw new Error('Your login session has expired. Please log in again.');
+}
 
-          body: JSON.stringify({
-           userId: authUser.id,
-           conversationId: conversationId || '',
-           messages: nextMessages
-        })
-        
-        }
-      );
+const r = await fetch(
+  `${endpoint}/functions/${functionId}/executions`,
+  {
+    method: 'POST',
+
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Appwrite-Project': projectId
+    },
+
+    body: JSON.stringify({
+      body: JSON.stringify({
+        supabaseAccessToken: session.access_token,
+        conversationId: conversationId || '',
+        messages: nextMessages
+      }),
+      async: false
+    })
+  }
+);
 
       let data={};
 

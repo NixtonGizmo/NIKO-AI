@@ -1,55 +1,93 @@
 export default async ({ req, res, log, error }) => {
   try {
-    const body =
-      typeof req.body === 'string'
-        ? JSON.parse(req.body || '{}')
-        : (req.body || {});
+    /*
+     * Parse the request body.
+     */
+    let body = req.body;
 
-    const messages = Array.isArray(body.messages)
+    if (typeof body === 'string') {
+      body = JSON.parse(body || '{}');
+    }
+
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      body = {};
+    }
+
+    if (body.body && typeof body.body === 'string') {
+      try {
+        body = JSON.parse(body.body);
+      } catch {
+        return res.json({ error: 'Invalid request body.' }, 400);
+      }
+    } else if (body.body && typeof body.body === 'object') {
+      body = body.body;
+    }
+
+    const supabaseAccessToken =
+      typeof body.supabaseAccessToken === 'string'
+        ? body.supabaseAccessToken.trim()
+        : '';
+
+    const requestedConversationId =
+      typeof body.conversationId === 'string'
+        ? body.conversationId.trim()
+        : '';
+
+    const incomingMessages = Array.isArray(body.messages)
       ? body.messages
       : [];
 
-    const userId = body.userId || '';
-    let conversationId = body.conversationId || '';
-
+    /*
+     * Environment configuration.
+     */
     const apiKey = process.env.AI_API_KEY;
 
     const baseUrl = (
-      process.env.AI_BASE_URL ||
-      'https://api.openai.com/v1'
+      process.env.AI_BASE_URL || 'https://api.openai.com/v1'
     ).replace(/\/$/, '');
 
-    const model =
-      process.env.AI_MODEL ||
-      'gpt-4.1-mini';
+    const model = process.env.AI_MODEL || 'gpt-4.1-mini';
 
-    /*
-     * Appwrite database configuration
-     */
-    const appwriteEndpoint =
-      process.env.APPWRITE_ENDPOINT ||
-      'https://sgp.cloud.appwrite.io/v1';
+    const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 
-    const appwriteProjectId =
-      process.env.APPWRITE_PROJECT_ID || '';
+    const appwriteEndpoint = (
+      process.env.APPWRITE_ENDPOINT || 'https://sgp.cloud.appwrite.io/v1'
+    ).replace(/\/$/, '');
 
-    const appwriteApiKey =
-      process.env.APPWRITE_API_KEY || '';
-
-    const databaseId =
-      process.env.APPWRITE_DATABASE_ID || '';
+    const appwriteProjectId = process.env.APPWRITE_PROJECT_ID || '';
+    const appwriteApiKey = process.env.APPWRITE_API_KEY || '';
+    const databaseId = process.env.APPWRITE_DATABASE_ID || '';
 
     const conversationsTableId =
-      process.env.APPWRITE_CONVERSATIONS_TABLE_ID ||
-      'conversations';
+      process.env.APPWRITE_CONVERSATIONS_TABLE_ID || 'conversations';
 
     const messagesTableId =
-      process.env.APPWRITE_MESSAGES_TABLE_ID ||
-      'messages';
+      process.env.APPWRITE_MESSAGES_TABLE_ID || 'messages';
 
     /*
-     * Validate AI configuration
+     * Validate required configuration.
      */
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return res.json(
+        {
+          error:
+            'Supabase verification is not configured in the Function environment.'
+        },
+        503
+      );
+    }
+
+    if (!appwriteProjectId || !appwriteApiKey || !databaseId) {
+      return res.json(
+        {
+          error:
+            'Appwrite database is not configured. Check APPWRITE_PROJECT_ID, APPWRITE_API_KEY and APPWRITE_DATABASE_ID.'
+        },
+        503
+      );
+    }
+
     if (!apiKey) {
       return res.json(
         {
@@ -60,41 +98,93 @@ export default async ({ req, res, log, error }) => {
       );
     }
 
-    /*
-     * Validate database configuration
-     */
-    if (
-      !appwriteProjectId ||
-      !appwriteApiKey ||
-      !databaseId
-    ) {
+    if (!supabaseAccessToken) {
       return res.json(
-        {
-          error:
-            'Appwrite database is not configured. Check APPWRITE_PROJECT_ID, APPWRITE_API_KEY and APPWRITE_DATABASE_ID.'
-        },
-        503
+        { error: 'Authentication required. Please log in again.' },
+        401
       );
     }
 
     /*
-     * Generate a simple unique Appwrite-compatible row ID.
+     * Verify the Supabase access token.
+     * Never trust a userId supplied by the browser.
      */
-    function uniqueId() {
-      return (
-        crypto.randomUUID().replace(/-/g, '') +
-        Date.now().toString(36)
-      ).slice(0, 36);
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: 'GET',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAccessToken}`
+      }
+    });
+
+    if (!authResponse.ok) {
+      log(`Supabase token verification failed: HTTP ${authResponse.status}`);
+
+      return res.json(
+        {
+          error:
+            'Your login session is invalid or expired. Please log in again.'
+        },
+        401
+      );
+    }
+
+    const supabaseUser = await authResponse.json();
+    const userId = supabaseUser?.id;
+
+    if (!userId || typeof userId !== 'string') {
+      return res.json(
+        { error: 'Unable to identify the authenticated user.' },
+        401
+      );
     }
 
     /*
-     * Appwrite REST helper
+     * Validate and normalize chat messages.
      */
-    async function appwriteRequest(
-      path,
-      method = 'GET',
-      data = null
-    ) {
+    const messages = incomingMessages
+      .filter(
+        (message) =>
+          message &&
+          (message.role === 'user' || message.role === 'assistant') &&
+          typeof message.content === 'string' &&
+          message.content.trim().length > 0
+      )
+      .slice(-40)
+      .map((message) => ({
+        role: message.role,
+        content: message.content
+      }));
+
+    if (messages.length === 0) {
+      return res.json(
+        { error: 'Please send a message to Niko.' },
+        400
+      );
+    }
+
+    const latestUserMessage = [...messages]
+      .reverse()
+      .find((message) => message.role === 'user');
+
+    if (!latestUserMessage) {
+      return res.json(
+        { error: 'A user message is required.' },
+        400
+      );
+    }
+
+    /*
+     * Generate an Appwrite-compatible row ID.
+     */
+    function uniqueId() {
+      return crypto.randomUUID().replace(/-/g, '');
+    }
+
+    /*
+     * Appwrite REST helper.
+     */
+    async function appwriteRequest(path, method = 'GET', data = null) {
       const options = {
         method,
         headers: {
@@ -122,31 +212,70 @@ export default async ({ req, res, log, error }) => {
       }
 
       if (!response.ok) {
-        throw new Error(
+        const message =
           responseData?.message ||
-          `Appwrite request failed with HTTP ${response.status}`
-        );
+          `Appwrite request failed with HTTP ${response.status}`;
+
+        throw new Error(message);
       }
 
       return responseData;
     }
 
     /*
-     * Save a message into Appwrite.
+     * Confirm conversation ownership.
      */
-    async function saveMessage(
-      conversationId,
-      messageUserId,
-      role,
-      content
-    ) {
-      return await appwriteRequest(
-        `/databases/${databaseId}/tables/${messagesTableId}/rows`,
+    async function verifyConversationOwnership(conversationId) {
+      const row = await appwriteRequest(
+        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
+        'GET'
+      );
+
+      const ownerId = row?.data?.userId ?? row?.userId;
+
+      return ownerId === userId;
+    }
+
+    /*
+     * Create a conversation row.
+     */
+    async function createConversation(firstMessage) {
+      const title = String(firstMessage || 'New conversation')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80) || 'New conversation';
+
+      const id = uniqueId();
+      const now = new Date().toISOString();
+
+      await appwriteRequest(
+        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows`,
+        'POST',
+        {
+          rowId: id,
+          data: {
+            userId,
+            title,
+            createdAt: now,
+            updatedAt: now
+          }
+        }
+      );
+
+      return id;
+    }
+
+    /*
+     * Save one message row.
+     */
+    async function saveMessage(conversationId, role, content) {
+      return appwriteRequest(
+        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(messagesTableId)}/rows`,
         'POST',
         {
           rowId: uniqueId(),
           data: {
-            userId: messageUserId,
+            userId,
             conversationId,
             role,
             content,
@@ -157,117 +286,60 @@ export default async ({ req, res, log, error }) => {
     }
 
     /*
-     * Create a new conversation.
+     * Use existing conversation only if it belongs to this user.
      */
-    async function createConversation(
-      messageUserId,
-      firstMessage
-    ) {
-      const title =
-        String(firstMessage || 'New conversation')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 80) ||
-        'New conversation';
+    let conversationId = requestedConversationId;
 
-      const id = uniqueId();
+    if (conversationId) {
+      let belongsToUser = false;
 
-      await appwriteRequest(
-        `/databases/${databaseId}/tables/${conversationsTableId}/rows`,
-        'POST',
-        {
-          rowId: id,
-          data: {
-            userId: messageUserId,
-            title,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-        }
-      );
-
-      return id;
-    }
-
-    /*
-     * Only save to database when we have a user ID.
-     */
-    if (!userId) {
-      log(
-        'No userId supplied. AI response will work, but history cannot be saved.'
-      );
-    }
-
-    /*
-     * Create conversation if this is the first message.
-     */
-    if (userId && !conversationId) {
-      const firstUserMessage =
-        messages.find(
-          (m) => m?.role === 'user'
-        )?.content || 'New conversation';
-
-      conversationId =
-        await createConversation(
-          userId,
-          firstUserMessage
+      try {
+        belongsToUser =
+          await verifyConversationOwnership(conversationId);
+      } catch (ownershipError) {
+        log(
+          `Conversation ownership check failed: ${ownershipError.message}`
         );
 
-      log(
-        `Created conversation: ${conversationId}`
-      );
-    }
-
-    /*
-     * Save latest user message.
-     *
-     * We save only the latest user message here.
-     * This prevents duplicate rows when the frontend
-     * sends the complete message history.
-     */
-    const latestUserMessage =
-      [...messages]
-        .reverse()
-        .find(
-          (m) =>
-            m?.role === 'user' &&
-            typeof m?.content === 'string'
+        return res.json(
+          {
+            error:
+              'Conversation not found or you do not have access to it.'
+          },
+          404
         );
+      }
 
-    if (
-      userId &&
-      conversationId &&
-      latestUserMessage
-    ) {
-      await saveMessage(
-        conversationId,
-        userId,
-        'user',
+      if (!belongsToUser) {
+        return res.json(
+          {
+            error:
+              'You do not have permission to access this conversation.'
+          },
+          403
+        );
+      }
+    } else {
+      conversationId = await createConversation(
         latestUserMessage.content
       );
+
+      log(`Created conversation: ${conversationId}`);
     }
 
     /*
-     * Send conversation to AI provider.
+     * Save the latest user message once.
      */
-    const r = await fetch(
-      `${baseUrl}/chat/completions`,
-      {
-        method: 'POST',
+    await saveMessage(
+      conversationId,
+      'user',
+      latestUserMessage.content
+    );
 
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-
-        body: JSON.stringify({
-          model,
-
-          messages: [
-            {
-              role: 'system',
-
-              content: `
+    /*
+     * Niko AI system instructions.
+     */
+    const systemPrompt = `
 You are Niko AI, the user's private personal AI assistant.
 
 IDENTITY:
@@ -301,43 +373,69 @@ BEHAVIOR:
 - Maintain the Niko identity consistently throughout the conversation.
 
 You are Niko. Speak naturally as Niko.
-`
-            },
+`;
 
+    /*
+     * Send conversation to configured AI provider.
+     */
+    const aiResponse = await fetch(
+      `${baseUrl}/chat/completions`,
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+
+        body: JSON.stringify({
+          model,
+
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
             ...messages
           ],
 
           stream: false
         })
+      }
+    );
+
+    let aiData = {};
+
+    try {
+      aiData = await aiResponse.json();
+    } catch {
+      aiData = {};
+    }
+
+    if (!aiResponse.ok) {
+      log(
+        `AI provider request failed: HTTP ${aiResponse.status}`
       );
 
-    const data = await r.json();
-
-    /*
-     * AI provider error
-     */
-    if (!r.ok) {
       return res.json(
         {
           error:
-            data?.error?.message ||
+            aiData?.error?.message ||
             'AI provider request failed.',
 
-          provider_status: r.status,
-
-          provider_response: data
+          provider_status: aiResponse.status
         },
-        r.status
+
+        aiResponse.status >= 400 && aiResponse.status <= 599
+          ? aiResponse.status
+          : 502
       );
     }
 
-    /*
-     * Extract Niko response.
-     */
     const content =
-      data?.choices?.[0]?.message?.content || '';
+      aiData?.choices?.[0]?.message?.content;
 
-    if (!content) {
+    if (typeof content !== 'string' || !content.trim()) {
       return res.json(
         {
           error:
@@ -348,59 +446,47 @@ You are Niko. Speak naturally as Niko.
     }
 
     /*
-     * Save Niko's response.
+     * Save Niko's reply and update conversation timestamp.
      */
-    if (userId && conversationId) {
-      await saveMessage(
-        conversationId,
-        userId,
-        'assistant',
-        content
-      );
+    await saveMessage(
+      conversationId,
+      'assistant',
+      content
+    );
 
-      /*
-       * Update conversation timestamp.
-       */
-      try {
-        await appwriteRequest(
-          `/databases/${databaseId}/tables/${conversationsTableId}/rows/${conversationId}`,
-          'PATCH',
-          {
-            data: {
-              updatedAt:
-                new Date().toISOString()
-            }
+    try {
+      await appwriteRequest(
+        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
+        'PATCH',
+        {
+          data: {
+            updatedAt: new Date().toISOString()
           }
-        );
-      } catch (updateError) {
-        log(
-          `Conversation timestamp update failed: ${
-            updateError?.message ||
-            String(updateError)
-          }`
-        );
-      }
+        }
+      );
+    } catch (updateError) {
+      log(
+        `Conversation timestamp update failed: ${updateError.message}`
+      );
     }
 
     /*
-     * Return response to frontend.
+     * Return successful response.
      */
     return res.json({
       content,
-      conversationId: conversationId || null
+      conversationId
     });
 
   } catch (e) {
     error(
-      e?.message ||
-      String(e)
+      e?.stack || e?.message || String(e)
     );
 
     return res.json(
       {
         error:
-          e?.message ||
-          'Niko AI function failed.'
+          e?.message || 'Niko AI Function failed.'
       },
       500
     );
