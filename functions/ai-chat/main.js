@@ -229,7 +229,7 @@ export default async ({ req, res, log, error }) => {
      */
     async function verifyConversationOwnership(conversationId) {
       const row = await appwriteRequest(
-        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
+        `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
         'GET'
       );
 
@@ -251,7 +251,7 @@ export default async ({ req, res, log, error }) => {
       const now = new Date().toISOString();
 
       await appwriteRequest(
-        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows`,
+        `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows`,
         'POST',
         {
           rowId: id,
@@ -272,7 +272,7 @@ export default async ({ req, res, log, error }) => {
      */
     async function saveMessage(conversationId, role, content) {
       return appwriteRequest(
-        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(messagesTableId)}/rows`,
+        `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(messagesTableId)}/rows`,
         'POST',
         {
           rowId: uniqueId(),
@@ -458,7 +458,7 @@ You are Niko. Speak naturally as Niko.
 
     try {
       await appwriteRequest(
-        `/databases/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
+        `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
         'PATCH',
         {
           data: {
