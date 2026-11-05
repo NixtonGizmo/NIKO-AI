@@ -895,12 +895,11 @@ function Chat(){
           },
 
           body: JSON.stringify({
-          body: JSON.stringify({
            userId: authUser.id,
            conversationId: conversationId || '',
            messages: nextMessages
         })
-        })
+        
         }
       );
 
