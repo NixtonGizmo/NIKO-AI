@@ -6,12 +6,200 @@ function Chat(){
   const [input,setInput]=useState('');
   const [busy,setBusy]=useState(false);
   const [conversationId,setConversationId]=useState('');
+  const [conversations,setConversations]=useState([]);
+  const [historyOpen,setHistoryOpen]=useState(false);
+  const [loadingHistory,setLoadingHistory]=useState(false);
+
+  const endpoint=
+    import.meta.env.VITE_APPWRITE_ENDPOINT ||
+    'https://sgp.cloud.appwrite.io/v1';
+
+  const functionId=
+    import.meta.env.VITE_APPWRITE_AI_FUNCTION_ID ||
+    'niko_ai_api';
+
+  const projectId=
+    import.meta.env.VITE_APPWRITE_PROJECT_ID;
+
+  /*
+   * Call the same Appwrite Function for both chat and
+   * protected history operations.
+   *
+   * The Function must return:
+   *
+   * list_conversations:
+   * {
+   *   conversations:[...]
+   * }
+   *
+   * get_messages:
+   * {
+   *   messages:[...]
+   * }
+   */
+  async function executeFunction(payload){
+
+    if(!projectId){
+      throw new Error(
+        'VITE_APPWRITE_PROJECT_ID is missing in .env'
+      );
+    }
+
+    const r=await fetch(
+      `${endpoint}/functions/${functionId}/executions`,
+      {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'X-Appwrite-Project':projectId
+        },
+        body:JSON.stringify({
+          body:JSON.stringify(payload)
+        })
+      }
+    );
+
+    let data={};
+
+    try{
+      data=await r.json();
+    }catch{
+      data={};
+    }
+
+    if(!r.ok){
+      throw new Error(
+        data?.message ||
+        data?.error ||
+        data?.responseBody ||
+        `Appwrite HTTP ${r.status}`
+      );
+    }
+
+    let body=data;
+
+    if(data?.responseBody){
+
+      try{
+        body=
+          typeof data.responseBody==='string'
+            ? JSON.parse(data.responseBody)
+            : data.responseBody;
+      }catch{
+        body={
+          content:String(data.responseBody)
+        };
+      }
+
+    }
+
+    return body;
+  }
+
+  async function loadConversations(){
+
+    if(!user?.id)return;
+
+    setLoadingHistory(true);
+
+    try{
+
+      const data=await executeFunction({
+        action:'list_conversations',
+        userId:user.id
+      });
+
+      const list=
+        Array.isArray(data?.conversations)
+          ? data.conversations
+          : Array.isArray(data)
+            ? data
+            : [];
+
+      setConversations(list);
+
+    }catch(e){
+
+      console.error(
+        'NIKO HISTORY LOAD ERROR:',
+        e
+      );
+
+    }finally{
+
+      setLoadingHistory(false);
+
+    }
+
+  }
+
+  async function loadConversation(id){
+
+    if(!user?.id || !id || busy)return;
+
+    setBusy(true);
+    setHistoryOpen(false);
+
+    try{
+
+      const data=await executeFunction({
+        action:'get_messages',
+        userId:user.id,
+        conversationId:id
+      });
+
+      const list=
+        Array.isArray(data?.messages)
+          ? data.messages
+          : Array.isArray(data)
+            ? data
+            : [];
+
+      const restored=list
+        .filter(m=>
+          m &&
+          (m.role==='user' || m.role==='assistant')
+        )
+        .map(m=>({
+          role:m.role,
+          content:String(m.content || '')
+        }));
+
+      setConversationId(id);
+      setMessages(restored);
+
+    }catch(e){
+
+      console.error(
+        'NIKO CONVERSATION LOAD ERROR:',
+        e
+      );
+
+      setMessages(m=>[
+        ...m,
+        {
+          role:'assistant',
+          content:
+            `Niko history error: ${
+              e?.message || 'Unable to load conversation.'
+            }`
+        }
+      ]);
+
+    }finally{
+
+      setBusy(false);
+
+    }
+
+  }
 
   async function send(){
 
     if(!input.trim() || busy)return;
 
     if(!user?.id){
+
       setMessages(m=>[
         ...m,
         {
@@ -19,7 +207,9 @@ function Chat(){
           content:'Niko connection error: You must be signed in.'
         }
       ]);
+
       return;
+
     }
 
     const text=input.trim();
@@ -39,23 +229,6 @@ function Chat(){
 
     try{
 
-      const endpoint=
-        import.meta.env.VITE_APPWRITE_ENDPOINT ||
-        'https://sgp.cloud.appwrite.io/v1';
-
-      const functionId=
-        import.meta.env.VITE_APPWRITE_AI_FUNCTION_ID ||
-        'niko_ai_api';
-
-      const projectId=
-        import.meta.env.VITE_APPWRITE_PROJECT_ID;
-
-      if(!projectId){
-        throw new Error(
-          'VITE_APPWRITE_PROJECT_ID is missing in .env'
-        );
-      }
-
       console.log('NIKO REQUEST:',{
         endpoint,
         functionId,
@@ -63,143 +236,33 @@ function Chat(){
         conversationId:conversationId || '(new)'
       });
 
-      const r=await fetch(
-        `${endpoint}/functions/${functionId}/executions`,
-        {
-          method:'POST',
+      const data=await executeFunction({
 
-          headers:{
-            'Content-Type':'application/json',
-            'X-Appwrite-Project':projectId
-          },
+        action:'chat',
 
-          body:JSON.stringify({
+        userId:user.id,
 
-            body:JSON.stringify({
+        conversationId:
+          conversationId || '',
 
-              /*
-               * Supabase authenticated user
-               */
-              userId:user.id,
+        messages:nextMessages
 
-              /*
-               * Existing conversation.
-               * Empty on first message.
-               */
-              conversationId:conversationId || '',
-
-              /*
-               * Full conversation sent to AI
-               */
-              messages:nextMessages
-
-            })
-
-          })
-        }
-      );
-
-      let data={};
-
-      try{
-
-        data=await r.json();
-
-      }catch{
-
-        data={};
-
-      }
+      });
 
       console.log(
         'NIKO APPWRITE RESPONSE:',
         data
       );
 
-      if(!r.ok){
+      let out=
+        data?.content ||
+        data?.message ||
+        '';
 
-        throw new Error(
-          data?.message ||
-          data?.error ||
-          data?.responseBody ||
-          `Appwrite HTTP ${r.status}`
-        );
+      const returnedConversationId=
+        data?.conversationId ||
+        '';
 
-      }
-
-      let out='';
-      let returnedConversationId='';
-
-      /*
-       * Appwrite Function execution response
-       *
-       * responseBody may contain:
-       *
-       * {
-       *   "content":"Hello",
-       *   "conversationId":"..."
-       * }
-       */
-
-      if(data?.responseBody){
-
-        try{
-
-          const body=
-            typeof data.responseBody==='string'
-              ? JSON.parse(data.responseBody)
-              : data.responseBody;
-
-          out=
-            body?.content ||
-            body?.message ||
-            '';
-
-          returnedConversationId=
-            body?.conversationId ||
-            '';
-
-        }catch{
-
-          /*
-           * responseBody was plain text
-           */
-          out=String(data.responseBody);
-
-        }
-
-      }
-
-      /*
-       * Fallback formats
-       */
-      if(!out){
-
-        out=
-          data?.content ||
-          data?.message ||
-          '';
-
-      }
-
-      /*
-       * Conversation ID may also be returned
-       * directly by Appwrite.
-       */
-      if(!returnedConversationId){
-
-        returnedConversationId=
-          data?.conversationId ||
-          '';
-
-      }
-
-      /*
-       * Save conversation ID in React state.
-       *
-       * First request creates the conversation.
-       * All following requests use the same ID.
-       */
       if(returnedConversationId){
 
         setConversationId(
@@ -221,9 +284,6 @@ function Chat(){
 
       }
 
-      /*
-       * Add Niko response to UI.
-       */
       setMessages(m=>[
         ...m,
         {
@@ -232,6 +292,13 @@ function Chat(){
         }
       ]);
 
+      /*
+       * Refresh the conversation list after every
+       * successful message so the new conversation
+       * appears immediately.
+       */
+      loadConversations();
+
     }catch(e){
 
       console.error(
@@ -239,18 +306,13 @@ function Chat(){
         e
       );
 
-      /*
-       * Remove the optimistic user message if
-       * the request itself failed.
-       */
       setMessages(m=>[
         ...m,
         {
           role:'assistant',
           content:
             `Niko connection error: ${
-              e?.message ||
-              'Unknown error'
+              e?.message || 'Unknown error'
             }`
         }
       ]);
@@ -265,17 +327,11 @@ function Chat(){
 
   function newChat(){
 
-    /*
-     * Clear current conversation ID.
-     *
-     * Next message will create a completely
-     * new conversation in Appwrite.
-     */
     setConversationId('');
-
     setMessages([]);
-
     setInput('');
+    setHistoryOpen(false);
+
   }
 
   function copyMessage(content){
@@ -285,6 +341,51 @@ function Chat(){
       .catch(()=>{});
 
   }
+
+  function formatConversationTitle(item){
+
+    return (
+      item?.title ||
+      item?.name ||
+      'New conversation'
+    );
+
+  }
+
+  function formatConversationDate(item){
+
+    const value=
+      item?.updatedAt ||
+      item?.createdAt;
+
+    if(!value)return '';
+
+    try{
+
+      return new Date(value)
+        .toLocaleDateString(
+          undefined,
+          {
+            day:'numeric',
+            month:'short'
+          }
+        );
+
+    }catch{
+
+      return '';
+
+    }
+
+  }
+
+  useEffect(()=>{
+
+    if(!user?.id)return;
+
+    loadConversations();
+
+  },[user?.id]);
 
   return (
     <div className="chat-page">
@@ -303,15 +404,148 @@ function Chat(){
 
         </div>
 
-        <button
-          className="icon-btn"
-          title="New chat"
-          onClick={newChat}
+        <div
+          style={{
+            display:'flex',
+            alignItems:'center',
+            gap:8
+          }}
         >
-          <Plus/>
-        </button>
+
+          <button
+            className="icon-btn"
+            title="Chat history"
+            onClick={()=>{
+              setHistoryOpen(v=>!v);
+              if(!historyOpen){
+                loadConversations();
+              }
+            }}
+          >
+            <Search/>
+          </button>
+
+          <button
+            className="icon-btn"
+            title="New chat"
+            onClick={newChat}
+          >
+            <Plus/>
+          </button>
+
+        </div>
 
       </div>
+
+      {historyOpen && (
+
+        <div
+          className="chat-history"
+          style={{
+            marginBottom:12,
+            maxHeight:260,
+            overflowY:'auto'
+          }}
+        >
+
+          <div
+            style={{
+              display:'flex',
+              alignItems:'center',
+              justifyContent:'space-between',
+              marginBottom:8
+            }}
+          >
+
+            <strong>
+              Recent chats
+            </strong>
+
+            <button
+              type="button"
+              onClick={loadConversations}
+              disabled={loadingHistory}
+              style={{
+                border:0,
+                background:'transparent',
+                cursor:'pointer',
+                opacity:loadingHistory ? .5 : 1
+              }}
+            >
+              {loadingHistory ? 'Loading…' : 'Refresh'}
+            </button>
+
+          </div>
+
+          {conversations.length===0 ? (
+
+            <div
+              style={{
+                padding:'12px 4px',
+                opacity:.65
+              }}
+            >
+              No saved conversations yet.
+            </div>
+
+          ) : (
+
+            conversations.map(item=>{
+
+              const id=
+                item?.$id ||
+                item?.id ||
+                item?.conversationId;
+
+              if(!id)return null;
+
+              return (
+
+                <button
+                  key={id}
+                  type="button"
+                  onClick={()=>
+                    loadConversation(id)
+                  }
+                  disabled={busy}
+                  style={{
+                    width:'100%',
+                    textAlign:'left',
+                    border:0,
+                    background:
+                      id===conversationId
+                        ? 'rgba(255,255,255,.08)'
+                        : 'transparent',
+                    padding:'10px 8px',
+                    borderRadius:10,
+                    cursor:'pointer',
+                    marginBottom:3
+                  }}
+                >
+
+                  <div>
+                    {formatConversationTitle(item)}
+                  </div>
+
+                  <small
+                    style={{
+                      opacity:.55
+                    }}
+                  >
+                    {formatConversationDate(item)}
+                  </small>
+
+                </button>
+
+              );
+
+            })
+
+          )}
+
+        </div>
+
+      )}
 
       <div className="chat-window">
 
@@ -451,6 +685,7 @@ function Chat(){
         <button
           className="icon-btn"
           type="button"
+          title="Attach file"
         >
           <Paperclip size={19}/>
         </button>
