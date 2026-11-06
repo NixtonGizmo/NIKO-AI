@@ -1732,7 +1732,11 @@ function Splash() {
   return (
     <div className="splash">
       <div className="logo-mark">
-        <img src="public/niko-logo.png" alt="Niko AI" />
+        <img
+          src="/niko-logo.png"
+          alt="NIKO AI"
+          onError={(e) => console.log("Logo not found:", e.currentTarget.src)}
+        />
       </div>
       NIKO AI
     </div>
