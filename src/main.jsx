@@ -4053,6 +4053,9 @@ IMPORTANT LANGUAGE RULES:
         result?.message ||
         '';
 
+        const romanCaption =
+  result?.transliteratedUserText || userText;
+
       if (!output) {
         throw new Error('Niko returned an empty response.');
       }
@@ -4083,7 +4086,7 @@ IMPORTANT LANGUAGE RULES:
       });
 
       if (mountedRef.current) {
-        setCaption(hinglishOutput);
+        setCaption(romanCaption);
         setThinking(false);
       }
 
