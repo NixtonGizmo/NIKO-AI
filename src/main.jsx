@@ -2963,7 +2963,7 @@ function Chat() {
 
             }),
 
-            async: false
+            async: true
 
           })
 
@@ -3978,7 +3978,7 @@ IMPORTANT LANGUAGE RULES:
                 ...nextMessages
               ]
             }),
-            async: false
+            async: ture
           })
         }
       );
