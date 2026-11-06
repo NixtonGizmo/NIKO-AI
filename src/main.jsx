@@ -2964,7 +2964,7 @@ function Chat() {
 
             }),
 
-            async: False
+            async: false
 
           })
 
