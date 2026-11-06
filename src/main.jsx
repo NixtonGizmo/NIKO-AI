@@ -3560,6 +3560,7 @@ function ChatHistory() {
 
 
 
+
 function Voice() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -3568,11 +3569,13 @@ function Voice() {
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [caption, setCaption] = useState('');
+  const [userCaption, setUserCaption] = useState('');
   const [status, setStatus] = useState('Tap Niko to begin');
   const [active, setActive] = useState(false);
 
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
+  const interimRef = useRef('');
   const historyRef = useRef([]);
   const serverIdRef = useRef('');
   const localIdRef = useRef(makeId());
@@ -3581,6 +3584,78 @@ function Voice() {
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const restartTimerRef = useRef(null);
+  const silenceTimerRef = useRef(null);
+
+  // Hindi Devanagari to Roman Hinglish
+  function toHinglish(text) {
+    const map = {
+      'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee',
+      'उ': 'u', 'ऊ': 'oo', 'ऋ': 'ri',
+      'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au',
+
+      'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh',
+      'ङ': 'n', 'च': 'ch', 'छ': 'chh', 'ज': 'j',
+      'झ': 'jh', 'ञ': 'ny', 'ट': 't', 'ठ': 'th',
+      'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+      'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh',
+      'न': 'n', 'प': 'p', 'फ': 'ph', 'ब': 'b',
+      'भ': 'bh', 'म': 'm', 'य': 'y', 'र': 'r',
+      'ल': 'l', 'व': 'v', 'श': 'sh', 'ष': 'sh',
+      'स': 's', 'ह': 'h', 'ळ': 'l',
+
+      'ा': 'aa', 'ि': 'i', 'ी': 'ee',
+      'ु': 'u', 'ू': 'oo', 'ृ': 'ri',
+      'े': 'e', 'ै': 'ai', 'ो': 'o',
+      'ौ': 'au', 'ं': 'n', 'ः': 'h',
+      'ँ': 'n', '्': '', '़': '',
+
+      '।': '.', '॥': '.',
+      '०': '0', '१': '1', '२': '2',
+      '३': '3', '४': '4', '५': '5',
+      '६': '6', '७': '7', '८': '8',
+      '९': '9'
+    };
+
+    let result = '';
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+
+      if (map[char] !== undefined) {
+        result += map[char];
+
+        // Add inherent vowel to consonants unless followed by
+        // a vowel sign or virama.
+        const consonants = 'कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहळ';
+
+        if (
+          consonants.includes(char) &&
+          i + 1 < text.length &&
+          !'ािीुूृेैोौ़्'.includes(text[i + 1])
+        ) {
+          result += 'a';
+        }
+      } else {
+        result += char;
+      }
+    }
+
+    return result
+      .replace(/aa+/g, 'aa')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function updateStatus(value) {
+    if (mountedRef.current) {
+      setStatus(value);
+    }
+  }
+
+  function clearTimers() {
+    clearTimeout(restartTimerRef.current);
+    clearTimeout(silenceTimerRef.current);
+  }
 
   useEffect(() => {
     mountedRef.current = true;
@@ -3589,18 +3664,12 @@ function Voice() {
       mountedRef.current = false;
       activeRef.current = false;
 
-      clearTimeout(restartTimerRef.current);
+      clearTimers();
 
       recognitionRef.current?.stop();
       window.speechSynthesis?.cancel();
     };
   }, []);
-
-  function updateStatus(value) {
-    if (mountedRef.current) {
-      setStatus(value);
-    }
-  }
 
   function stopRecognition() {
     clearTimeout(restartTimerRef.current);
@@ -3612,6 +3681,49 @@ function Voice() {
         console.log(error);
       }
     }
+  }
+
+  function scheduleRestart(delay = 400) {
+    clearTimeout(restartTimerRef.current);
+
+    if (!activeRef.current || busyRef.current) return;
+
+    restartTimerRef.current = setTimeout(() => {
+      if (activeRef.current && !busyRef.current) {
+        startRecognition();
+      }
+    }, delay);
+  }
+
+  function processSpeech() {
+    if (!activeRef.current || busyRef.current) return;
+
+    const spokenText = (
+      transcriptRef.current + ' ' + interimRef.current
+    ).trim();
+
+    transcriptRef.current = '';
+    interimRef.current = '';
+
+    clearTimeout(silenceTimerRef.current);
+
+    if (!spokenText) {
+      return;
+    }
+
+    setUserCaption(toHinglish(spokenText));
+
+    stopRecognition();
+
+    askNiko(spokenText);
+  }
+
+  function startSilenceTimer() {
+    clearTimeout(silenceTimerRef.current);
+
+    silenceTimerRef.current = setTimeout(() => {
+      processSpeech();
+    }, 5000);
   }
 
   function startRecognition() {
@@ -3626,15 +3738,15 @@ function Voice() {
       return;
     }
 
+    if (recognitionRef.current) return;
+
     try {
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
 
       recognition.lang = 'hi-IN';
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
-
-      transcriptRef.current = '';
 
       recognition.onstart = () => {
         if (!mountedRef.current) return;
@@ -3644,7 +3756,10 @@ function Voice() {
       };
 
       recognition.onresult = event => {
+        if (!activeRef.current || busyRef.current) return;
+
         let finalText = '';
+        let interimText = '';
 
         for (
           let i = event.resultIndex;
@@ -3652,14 +3767,29 @@ function Voice() {
           i++
         ) {
           const result = event.results[i];
+          const text = result[0].transcript;
 
           if (result.isFinal) {
-            finalText += result[0].transcript + ' ';
+            finalText += text + ' ';
+          } else {
+            interimText += text;
           }
         }
 
         if (finalText.trim()) {
           transcriptRef.current += finalText;
+        }
+
+        interimRef.current = interimText;
+
+        const currentText = (
+          transcriptRef.current + ' ' + interimRef.current
+        ).trim();
+
+        if (currentText && mountedRef.current) {
+          setUserCaption(toHinglish(currentText));
+          updateStatus('Listening...');
+          startSilenceTimer();
         }
       };
 
@@ -3681,23 +3811,16 @@ function Voice() {
       };
 
       recognition.onend = () => {
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
+
         if (!mountedRef.current) return;
 
         setListening(false);
 
-        const spokenText = transcriptRef.current.trim();
-        transcriptRef.current = '';
-
-        if (spokenText && activeRef.current) {
-          askNiko(spokenText);
-          return;
-        }
-
         if (activeRef.current && !busyRef.current) {
-          restartTimerRef.current = setTimeout(
-            startRecognition,
-            500
-          );
+          scheduleRestart(400);
         }
       };
 
@@ -3705,12 +3828,10 @@ function Voice() {
 
     } catch (error) {
       console.error('Recognition error:', error);
+      recognitionRef.current = null;
 
-      if (activeRef.current) {
-        restartTimerRef.current = setTimeout(
-          startRecognition,
-          1200
-        );
+      if (activeRef.current && !busyRef.current) {
+        scheduleRestart(1000);
       }
     }
   }
@@ -3720,6 +3841,12 @@ function Voice() {
 
     activeRef.current = true;
     setActive(true);
+
+    transcriptRef.current = '';
+    interimRef.current = '';
+
+    setCaption('');
+    setUserCaption('');
 
     updateStatus('Connecting microphone...');
 
@@ -3731,9 +3858,13 @@ function Voice() {
     setActive(false);
     busyRef.current = false;
 
+    clearTimers();
     stopRecognition();
 
     window.speechSynthesis?.cancel();
+
+    transcriptRef.current = '';
+    interimRef.current = '';
 
     setListening(false);
     setThinking(false);
@@ -3745,23 +3876,31 @@ function Voice() {
   function speakReply(message) {
     if (!('speechSynthesis' in window)) {
       updateStatus('Reply ready');
-
-      if (activeRef.current) {
-        startRecognition();
-      }
-
+      scheduleRestart(400);
       return;
     }
 
     window.speechSynthesis.cancel();
 
-    const hasHindi = /[\u0900-\u097F]/.test(message);
+    const utterance = new SpeechSynthesisUtterance(
+      toHinglish(message)
+    );
 
-    const utterance = new SpeechSynthesisUtterance(message);
-
-    utterance.lang = hasHindi ? 'hi-IN' : 'en-IN';
-    utterance.rate = 1;
+    utterance.lang = 'hi-IN';
+    utterance.rate = 0.92;
     utterance.pitch = 1;
+
+    const voices = window.speechSynthesis.getVoices();
+
+    const hindiVoice = voices.find(
+      voice => voice.lang.toLowerCase() === 'hi-in'
+    ) || voices.find(
+      voice => voice.lang.toLowerCase().startsWith('hi')
+    );
+
+    if (hindiVoice) {
+      utterance.voice = hindiVoice;
+    }
 
     utterance.onstart = () => {
       if (!mountedRef.current) return;
@@ -3777,22 +3916,17 @@ function Voice() {
 
       if (activeRef.current) {
         updateStatus('Listening...');
-
-        restartTimerRef.current = setTimeout(
-          startRecognition,
-          300
-        );
+        scheduleRestart(400);
       }
     };
 
-    utterance.onerror = () => {
+    utterance.onerror = error => {
+      console.error('Speech synthesis:', error);
+
       if (!mountedRef.current) return;
 
       setSpeaking(false);
-
-      if (activeRef.current) {
-        startRecognition();
-      }
+      scheduleRestart(400);
     };
 
     window.speechSynthesis.speak(utterance);
@@ -3803,9 +3937,10 @@ function Voice() {
 
     busyRef.current = true;
 
-    setThinking(true);
-    setCaption('');
+    clearTimeout(silenceTimerRef.current);
+    clearTimeout(restartTimerRef.current);
 
+    setThinking(true);
     updateStatus('Niko is thinking...');
 
     const nextMessages = [
@@ -3855,7 +3990,26 @@ function Voice() {
             body: JSON.stringify({
               supabaseAccessToken: session.access_token,
               conversationId: serverIdRef.current || null,
-              messages: nextMessages
+
+              messages: [
+                {
+                  role: 'system',
+                  content: `
+You are Niko, a friendly AI voice assistant.
+
+IMPORTANT LANGUAGE RULES:
+- Always reply in natural Hinglish.
+- Write Hindi words using English/Roman letters.
+- Never use Devanagari Hindi script.
+- Mix simple English words naturally with Hindi.
+- Understand both Hindi and English.
+- Keep voice replies short, natural and conversational.
+- Example: "Haan, bilkul! Main tumhari help kar sakta hoon."
+- Do not reply in pure English unless the user specifically asks.
+`
+                },
+                ...nextMessages
+              ]
             }),
             async: false
           })
@@ -3894,7 +4048,10 @@ function Voice() {
         );
       }
 
-      const output = result?.content || result?.message || '';
+      const output =
+        result?.content ||
+        result?.message ||
+        '';
 
       if (!output) {
         throw new Error('Niko returned an empty response.');
@@ -3906,11 +4063,13 @@ function Voice() {
 
       serverIdRef.current = result.conversationId;
 
+      const hinglishOutput = toHinglish(String(output));
+
       const finalMessages = [
         ...nextMessages,
         {
           role: 'assistant',
-          content: String(output)
+          content: hinglishOutput
         }
       ];
 
@@ -3924,14 +4083,14 @@ function Voice() {
       });
 
       if (mountedRef.current) {
-        setCaption(String(output));
+        setCaption(hinglishOutput);
         setThinking(false);
       }
 
       busyRef.current = false;
 
       if (activeRef.current) {
-        speakReply(String(output));
+        speakReply(hinglishOutput);
       }
 
     } catch (error) {
@@ -3946,10 +4105,7 @@ function Voice() {
       busyRef.current = false;
 
       if (activeRef.current) {
-        restartTimerRef.current = setTimeout(
-          startRecognition,
-          500
-        );
+        scheduleRestart(500);
       }
     }
   }
@@ -3957,7 +4113,6 @@ function Voice() {
   return (
     <>
       <style>{`
-
         .niko-voice-screen {
           min-height: 100vh;
           width: 100%;
@@ -3970,9 +4125,7 @@ function Voice() {
           box-sizing: border-box;
         }
 
-        .niko-voice-screen * {
-          box-sizing: border-box;
-        }
+        .niko-voice-screen * { box-sizing: border-box; }
 
         .niko-voice-header {
           min-height: 76px;
@@ -3993,11 +4146,6 @@ function Voice() {
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: .25s;
-        }
-
-        .niko-back:hover {
-          background: #eae0d1;
         }
 
         .niko-brand {
@@ -4009,14 +4157,8 @@ function Voice() {
           letter-spacing: 3px;
         }
 
-        .niko-brand small {
-          color: #a17d50;
-          font-size: 11px;
-        }
-
-        .niko-brand-icon {
-          color: #ad8754;
-        }
+        .niko-brand small { color: #a17d50; font-size: 11px; }
+        .niko-brand-icon { color: #ad8754; }
 
         .voice-live-indicator {
           color: #8b765c;
@@ -4059,9 +4201,7 @@ function Voice() {
           margin: 15px 0 8px;
         }
 
-        .niko-voice-intro h1 span {
-          color: #b18a58;
-        }
+        .niko-voice-intro h1 span { color: #b18a58; }
 
         .niko-voice-intro p {
           color: #8c7b68;
@@ -4077,7 +4217,6 @@ function Voice() {
           place-items: center;
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
-          outline: none;
         }
 
         .visualizer-ring {
@@ -4088,33 +4227,15 @@ function Voice() {
           pointer-events: none;
         }
 
-        .ring-1 {
-          width: 170px;
-          height: 170px;
-        }
-
-        .ring-2 {
-          width: 215px;
-          height: 215px;
-          animation-delay: .6s;
-        }
-
-        .ring-3 {
-          width: 255px;
-          height: 255px;
-          animation-delay: 1.2s;
-        }
+        .ring-1 { width: 170px; height: 170px; }
+        .ring-2 { width: 215px; height: 215px; animation-delay: .6s; }
+        .ring-3 { width: 255px; height: 255px; animation-delay: 1.2s; }
 
         .niko-orb-core {
           width: 125px;
           height: 125px;
           border-radius: 50%;
-          background: radial-gradient(
-            circle at 35% 30%,
-            #e8d5b5,
-            #b28c5e 65%,
-            #80603e
-          );
+          background: radial-gradient(circle at 35% 30%,#e8d5b5,#b28c5e 65%,#80603e);
           display: grid;
           place-items: center;
           color: #fff9ef;
@@ -4123,9 +4244,7 @@ function Voice() {
           transition: transform .3s, box-shadow .3s;
         }
 
-        .niko-visualizer:hover .niko-orb-core {
-          transform: scale(1.06);
-        }
+        .niko-visualizer:hover .niko-orb-core { transform: scale(1.06); }
 
         .orb-glow {
           position: absolute;
@@ -4147,12 +4266,7 @@ function Voice() {
           animation: niko-speak .8s ease-in-out infinite alternate;
         }
 
-        .visualizer-particles {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-        }
-
+        .visualizer-particles { position: absolute; inset: 0; pointer-events: none; }
         .visualizer-particles i {
           position: absolute;
           width: 5px;
@@ -4180,7 +4294,7 @@ function Voice() {
         .niko-caption-panel {
           width: min(540px,90%);
           min-height: 115px;
-          margin-top: 30px;
+          margin-top: 25px;
           padding: 20px;
           border: 1px solid #e3d7c7;
           border-radius: 15px;
@@ -4217,17 +4331,6 @@ function Voice() {
           margin-top: 20px;
         }
 
-        .thinking-animation {
-          margin-left: 7px;
-          animation: niko-dots 1s infinite;
-        }
-
-        .niko-voice-hint {
-          color: #9a8a77;
-          font: 12px Arial,sans-serif;
-          margin-top: 22px;
-        }
-
         .niko-stop-button {
           margin-top: 24px;
           padding: 11px 25px;
@@ -4238,11 +4341,12 @@ function Voice() {
           font: 12px Arial,sans-serif;
           letter-spacing: 1px;
           cursor: pointer;
-          transition: .25s;
         }
 
-        .niko-stop-button:hover {
-          background: #eadfce;
+        .niko-voice-hint {
+          color: #9a8a77;
+          font: 12px Arial,sans-serif;
+          margin-top: 22px;
         }
 
         .niko-voice-footer {
@@ -4266,64 +4370,34 @@ function Voice() {
           50% {transform:scale(1.09)}
         }
 
-        @keyframes niko-think {
-          to {transform:rotate(360deg)}
-        }
+        @keyframes niko-think { to {transform:rotate(360deg)} }
 
         @keyframes niko-speak {
           from {transform:scale(1)}
           to {transform:scale(1.12)}
         }
 
-        @keyframes niko-dots {
-          0%,100% {opacity:.3}
-          50% {opacity:1}
-        }
-
         @media(max-width:600px) {
-          .niko-voice-header {
-            padding: 0 16px;
-          }
-
-          .niko-visualizer {
-            transform: scale(.88);
-            margin: 15px auto;
-          }
-
-          .niko-voice-main {
-            padding: 25px 12px;
-          }
-
-          .niko-voice-footer {
-            font-size: 8px;
-            padding: 15px;
-          }
-
-          .niko-brand {
-            font-size: 14px;
-            letter-spacing: 2px;
-          }
-
-          .niko-voice-intro h1 {
-            font-size: 38px;
-          }
+          .niko-voice-header { padding: 0 16px; }
+          .niko-visualizer { transform:scale(.88); margin:15px auto; }
+          .niko-voice-main { padding:25px 12px; }
+          .niko-voice-footer { font-size:8px; padding:15px; }
+          .niko-brand { font-size:14px; letter-spacing:2px; }
+          .niko-voice-intro h1 { font-size:38px; }
         }
 
         @media(prefers-reduced-motion:reduce) {
           .niko-voice-screen *,
           .niko-voice-screen *::before,
           .niko-voice-screen *::after {
-            animation-duration: .01ms !important;
-            animation-iteration-count: 1 !important;
+            animation-duration:.01ms !important;
+            animation-iteration-count:1 !important;
           }
         }
-
       `}</style>
 
       <div className="niko-voice-screen">
-
         <header className="niko-voice-header">
-
           <button
             className="niko-back"
             onClick={() => {
@@ -4346,11 +4420,9 @@ function Voice() {
             <span />
             LIVE
           </div>
-
         </header>
 
         <main className="niko-voice-main">
-
           <div className="niko-voice-intro">
             <span className="niko-overline">
               YOUR PERSONAL AI COMPANION
@@ -4359,7 +4431,6 @@ function Voice() {
             <h1>
               {speaking ? "I'm speaking" :
                thinking ? "One moment" :
-               listening ? "I'm listening" :
                "I'm listening"}
               <span>.</span>
             </h1>
@@ -4384,7 +4455,6 @@ function Voice() {
             }}
             aria-label={active ? "Stop Niko" : "Activate Niko"}
           >
-
             <div className="visualizer-ring ring-1" />
             <div className="visualizer-ring ring-2" />
             <div className="visualizer-ring ring-3" />
@@ -4397,20 +4467,37 @@ function Voice() {
               <div className="orb-glow" />
               <Sparkles size={43} strokeWidth={1.4} />
             </div>
-
           </div>
 
           <div className="niko-voice-state">
             <span className="state-dot" />
-
             {thinking ? 'THINKING' :
              speaking ? 'SPEAKING' :
              listening ? 'LISTENING' :
              'READY'}
           </div>
 
+          {/* User speech caption */}
           <div className="niko-caption-panel">
+            <div className="caption-heading">
+              <span className="caption-line" />
+              <span>YOU SAID</span>
+              <span className="caption-line" />
+            </div>
 
+            <p className="niko-response-text">
+              {userCaption || (
+                <span className="niko-empty-caption">
+                  {listening
+                    ? 'Speak now...'
+                    : 'Your spoken words will appear here.'}
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Niko response caption */}
+          <div className="niko-caption-panel">
             <div className="caption-heading">
               <span className="caption-line" />
               <span>NIKO'S RESPONSE</span>
@@ -4419,26 +4506,20 @@ function Voice() {
 
             {thinking ? (
               <div className="niko-thinking-text">
-                Finding the right words
-                <span className="thinking-animation">•••</span>
+                Finding the right words...
               </div>
             ) : caption ? (
-              <p className="niko-response-text">
-                {caption}
-              </p>
+              <p className="niko-response-text">{caption}</p>
             ) : (
               <p className="niko-empty-caption">
-                {listening
-                  ? 'Go ahead, I am listening.'
-                  : 'Your conversation starts here.'}
+                Niko's response will appear here.
               </p>
             )}
-
           </div>
 
           <div className="niko-voice-hint">
             {active
-              ? 'Speak naturally · Niko will respond automatically'
+              ? 'Speak naturally · 5 seconds silence to reply'
               : 'Tap the orb once to start your conversation'}
           </div>
 
@@ -4450,18 +4531,17 @@ function Voice() {
               END CONVERSATION
             </button>
           )}
-
         </main>
 
         <footer className="niko-voice-footer">
           <span>POWERED BY NIKO AI</span>
           <span>MADE TO LISTEN. BUILT TO THINK.</span>
         </footer>
-
       </div>
     </>
   );
 }
+
 
 
 
