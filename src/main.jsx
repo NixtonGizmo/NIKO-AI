@@ -117,6 +117,11 @@ button {
   cursor: pointer;
 }
 
+.niko-logo {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 a {
   color: inherit;
   text-decoration: none;
