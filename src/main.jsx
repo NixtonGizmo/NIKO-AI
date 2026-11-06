@@ -27,6 +27,7 @@ import {
   MessageSquare,
   History,
   Mic2,
+  command,
   User,
   Plus,
   Search,
