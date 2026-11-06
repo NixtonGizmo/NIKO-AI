@@ -3076,269 +3076,377 @@ function ChatHistory() {
    VOICE ASSISTANT
 ========================================================= */
 
+
 function Voice() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [listening, setListening] = useState(false);
-
-  const [text, setText] = useState('');
-
+  const [thinking, setThinking] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [caption, setCaption] = useState('');
+  const [status, setStatus] = useState('Tap the orb and start speaking');
   const [language, setLanguage] = useState('en-IN');
 
   const recognitionRef = useRef(null);
+  const transcriptRef = useRef('');
+  const historyRef = useRef([]);
+  const serverIdRef = useRef('');
+  const localIdRef = useRef(makeId());
+  const busyRef = useRef(false);
 
   useEffect(() => {
-
     return () => {
       recognitionRef.current?.stop();
+      window.speechSynthesis?.cancel();
     };
-
   }, []);
 
-  function toggle() {
+  function speakReply(message) {
+    if (!('speechSynthesis' in window)) {
+      setStatus('Reply ready');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.lang = language;
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    utterance.onstart = () => {
+      setSpeaking(true);
+      setStatus('Niko is speaking');
+    };
+
+    utterance.onend = () => {
+      setSpeaking(false);
+      setStatus('Tap the orb to speak again');
+    };
+
+    utterance.onerror = () => {
+      setSpeaking(false);
+      setStatus('Reply ready');
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  async function askNiko(userText) {
+    if (!user?.id || busyRef.current) return;
+
+    busyRef.current = true;
+    setThinking(true);
+    setCaption('');
+    setStatus('Niko is thinking...');
+
+    const nextMessages = [
+      ...historyRef.current,
+      {
+        role: 'user',
+        content: userText
+      }
+    ];
+
+    historyRef.current = nextMessages;
+
+    try {
+      const endpoint =
+        import.meta.env.VITE_APPWRITE_ENDPOINT ||
+        'https://sgp.cloud.appwrite.io/v1';
+
+      const functionId =
+        import.meta.env.VITE_APPWRITE_AI_FUNCTION_ID ||
+        'niko_ai_api';
+
+      const projectId =
+        import.meta.env.VITE_APPWRITE_PROJECT_ID;
+
+      if (!projectId) {
+        throw new Error('Appwrite project ID is missing.');
+      }
+
+      const {
+        data: { session },
+        error: sessionError
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        throw new Error('Please sign in again.');
+      }
+
+      const response = await fetch(
+        `${endpoint}/functions/${functionId}/executions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Appwrite-Project': projectId
+          },
+          body: JSON.stringify({
+            body: JSON.stringify({
+              supabaseAccessToken: session.access_token,
+              conversationId: serverIdRef.current || null,
+              messages: nextMessages
+            }),
+            async: false
+          })
+        }
+      );
+
+      const execution = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          execution.message || `Appwrite HTTP ${response.status}`
+        );
+      }
+
+      if (execution.status === 'failed') {
+        throw new Error(
+          execution.stderr || 'Niko Function failed.'
+        );
+      }
+
+      let result = execution.responseBody;
+
+      if (typeof result === 'string') {
+        result = JSON.parse(result);
+      }
+
+      if (
+        execution.responseStatusCode &&
+        execution.responseStatusCode >= 400
+      ) {
+        throw new Error(
+          result?.error || result?.message || 'Niko request failed.'
+        );
+      }
+
+      const output = result?.content || result?.message || '';
+
+      if (!output) {
+        throw new Error('Niko returned an empty response.');
+      }
+
+      if (!result.conversationId) {
+        throw new Error('Conversation ID was not returned.');
+      }
+
+      serverIdRef.current = result.conversationId;
+
+      const finalMessages = [
+        ...nextMessages,
+        {
+          role: 'assistant',
+          content: String(output)
+        }
+      ];
+
+      historyRef.current = finalMessages;
+
+      // Save voice conversation in existing chat history.
+      saveConversation(user.id, {
+        id: localIdRef.current,
+        serverId: result.conversationId,
+        title: userText.slice(0, 55),
+        messages: finalMessages
+      });
+
+      // Show only Niko's reply, not your question.
+      setCaption(String(output));
+      setThinking(false);
+
+      speakReply(String(output));
+
+    } catch (error) {
+      console.error('NIKO VOICE ERROR:', error);
+      setCaption(`Connection error: ${error.message}`);
+      setStatus('Something went wrong');
+      setThinking(false);
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  function startListening() {
+    if (thinking || speaking || listening) return;
 
     const SpeechRecognition =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-
-      setText(
-        'Speech recognition is not supported in this browser.'
+      setCaption(
+        'Speech recognition is not supported. Please use Chrome or Edge.'
       );
-
       return;
-
     }
 
-    if (listening) {
-
-      recognitionRef.current?.stop();
-
-      setListening(false);
-
-      return;
-
-    }
+    transcriptRef.current = '';
 
     const recognition = new SpeechRecognition();
-
     recognitionRef.current = recognition;
 
     recognition.lang = language;
-
-    recognition.interimResults = true;
-
+    recognition.interimResults = false;
     recognition.continuous = false;
 
     recognition.onstart = () => {
       setListening(true);
-      setText('');
+      setCaption('');
+      setStatus('Listening to you...');
     };
 
     recognition.onresult = event => {
+      const spokenText = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join(' ')
+        .trim();
 
-      setText(
-        Array.from(event.results)
-          .map(result => result[0].transcript)
-          .join('')
-      );
-
+      transcriptRef.current = spokenText;
     };
 
     recognition.onerror = event => {
-
-      setText(
-        `Voice error: ${event.error}`
-      );
-
       setListening(false);
-
+      setStatus(`Microphone error: ${event.error}`);
     };
 
     recognition.onend = () => {
       setListening(false);
+
+      const spokenText = transcriptRef.current.trim();
+      transcriptRef.current = '';
+
+      if (spokenText) {
+        askNiko(spokenText);
+      } else {
+        setStatus('I did not hear anything. Try again.');
+      }
     };
 
-    recognition.start();
-
+    try {
+      recognition.start();
+    } catch (error) {
+      setListening(false);
+      setStatus('Could not start microphone. Try again.');
+    }
   }
 
-  function speak() {
+  function stopVoice() {
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
 
-    if (!text || !('speechSynthesis' in window)) return;
-
-    speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.lang = language;
-
-    utterance.rate = 1;
-
-    utterance.pitch = 1;
-
-    speechSynthesis.speak(utterance);
-
-  }
-
-  function stopSpeech() {
-
-    speechSynthesis.cancel();
-
-  }
-
-  function sendToChat() {
-
-    if (!text.trim()) return;
-
-    sessionStorage.setItem(
-      'niko_voice_message',
-      text
-    );
-
-    window.location.href = '/app/chat';
-
+    setListening(false);
+    setSpeaking(false);
+    setStatus('Voice stopped');
   }
 
   return (
+    <div className="voice-assistant">
 
-    <div className="page">
+      <div className="voice-header">
+        <button
+          className="voice-back"
+          onClick={() => navigate('/app/chat')}
+        >
+          ← Back to chat
+        </button>
 
-      <div className="page-head">
-
-        <div>
-          <span className="eyebrow">
-            NATURAL CONVERSATION
-          </span>
-
-          <h1>Voice studio</h1>
-
-          <p>
-            Speak naturally. Let Niko listen.
-          </p>
-        </div>
-
+        <span className="eyebrow">NIKO / VOICE ASSISTANT</span>
       </div>
 
-      <div className="voice-stage">
+      <div className="voice-center">
 
         <div
-          className={
-            listening
-              ? 'voice-orb listening'
-              : 'voice-orb'
-          }
+          className={`niko-orb ${
+            listening ? 'is-listening' :
+            thinking ? 'is-thinking' :
+            speaking ? 'is-speaking' : ''
+          }`}
+          onClick={startListening}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              startListening();
+            }
+          }}
+          aria-label="Start talking to Niko"
         >
+          <div className="orb-wave wave-one" />
+          <div className="orb-wave wave-two" />
+          <div className="orb-wave wave-three" />
 
-          <div className="voice-core">
-            <Mic2 size={42} />
+          <div className="orb-core">
+            <Sparkles size={42} />
           </div>
-
         </div>
 
-        <span className="voice-state">
-          {listening
-            ? 'Listening to you...'
-            : 'Ready when you are'}
-        </span>
+        <h2>Niko</h2>
 
-        <h2>
-          {text || 'What would you like to say?'}
-        </h2>
+        <p className="voice-status">{status}</p>
 
-        <div className="voice-actions">
+        <div className="voice-caption">
+          {thinking ? (
+            <span className="caption-thinking">
+              Niko is preparing a reply
+              <span className="caption-dots">...</span>
+            </span>
+          ) : caption ? (
+            <>
+              <span className="caption-label">NIKO SAYS</span>
+              <p>{caption}</p>
+            </>
+          ) : (
+            <span className="caption-placeholder">
+              {listening
+                ? 'Listening...'
+                : 'Your conversation will appear here'}
+            </span>
+          )}
+        </div>
+
+        <div className="voice-controls">
 
           <button
-            className="btn primary"
-            onClick={toggle}
+            className="voice-main-btn"
+            onClick={startListening}
+            disabled={listening || thinking || speaking}
           >
-
-            {listening
-              ? <Square size={15} />
-              : <Mic2 size={15} />}
-
-            {listening
-              ? 'Stop listening'
-              : 'Start speaking'}
-
+            {listening ? 'Listening...' : 'Start speaking'}
           </button>
 
           <button
-            className="btn ghost"
-            onClick={speak}
-            disabled={!text}
+            className="voice-stop-btn"
+            onClick={stopVoice}
+            disabled={!listening && !speaking && !thinking}
           >
-            <Volume2 size={16} />
-            Speak text
-          </button>
-
-          <button
-            className="btn ghost"
-            onClick={stopSpeech}
-          >
-            <StopCircle size={16} />
-            Stop audio
+            Stop
           </button>
 
         </div>
 
-        <div style={{ marginTop: 28 }}>
+        <select
+          className="voice-language"
+          value={language}
+          onChange={e => setLanguage(e.target.value)}
+          disabled={listening || speaking || thinking}
+        >
+          <option value="en-IN">English (India)</option>
+          <option value="hi-IN">Hindi</option>
+          <option value="en-US">English (US)</option>
+        </select>
 
-          <label
-            style={{
-              fontSize: 11,
-              color: 'var(--muted)'
-            }}
-          >
-            Recognition language &nbsp;
-
-            <select
-              value={language}
-              onChange={e => setLanguage(e.target.value)}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 7,
-                padding: 8,
-                color: 'var(--brown)'
-              }}
-            >
-              <option value="en-IN">English (India)</option>
-              <option value="hi-IN">Hindi</option>
-              <option value="en-US">English (US)</option>
-            </select>
-
-          </label>
-
-        </div>
-
-        {text && (
-
-          <div style={{ marginTop: 25 }}>
-
-            <button
-              className="btn primary"
-              onClick={sendToChat}
-            >
-              Send to chat
-              <Send size={15} />
-            </button>
-
-          </div>
-
-        )}
-
-        <p className="muted center" style={{ marginTop: 25 }}>
-          Voice uses your browser's speech recognition
-          and speech synthesis capabilities.
+        <p className="voice-footer">
+          Speak naturally. Niko will listen and reply.
         </p>
 
       </div>
-
     </div>
-
   );
-
 }
 
 
