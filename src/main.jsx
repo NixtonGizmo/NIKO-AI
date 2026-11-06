@@ -2637,61 +2637,41 @@ setServerId(remoteConversationId);
           <div className="messages">
 
             {messages.map((message, index) => (
+  <div
+    className={`message-row ${
+      message.role === 'user' ? 'user-row' : 'ai-row'
+    }`}
+    key={`${index}-${message.role}`}
+  >
+    <div
+      className={`message-bubble ${
+        message.role === 'user' ? 'user-bubble' : 'ai-bubble'
+      }`}
+    >
+      <div className="role">
+        {message.role === 'assistant' ? 'Niko' : 'You'}
+      </div>
 
-              <div
-                className={`message ${message.role}`}
-                key={`${index}-${message.role}`}
-              >
+      <div className="content">
+        {message.content}
+      </div>
 
-                <div className="message-avatar">
+      {message.role === 'assistant' && (
+        <div className="msg-actions">
+          <button onClick={() => copyMessage(message.content)}>
+            <Copy size={13} /> Copy
+          </button>
 
-                  {message.role === 'assistant'
-                    ? <Sparkles size={15} />
-                    : <User size={15} />}
-
-                </div>
-
-                <div className="bubble">
-
-                  <div className="role">
-                    {message.role === 'assistant'
-                      ? 'Niko'
-                      : 'You'}
-                  </div>
-
-                  <div className="content">
-                    {message.content}
-                  </div>
-
-                  {message.role === 'assistant' && (
-
-                    <div className="msg-actions">
-
-                      <button
-                        onClick={() => copyMessage(message.content)}
-                      >
-                        <Copy size={13} />
-                        Copy
-                      </button>
-
-                      {index === messages.length - 1 && (
-
-                        <button onClick={regenerate}>
-                          <RefreshCw size={13} />
-                          Regenerate
-                        </button>
-
-                      )}
-
-                    </div>
-
-                  )}
-
-                </div>
-
-              </div>
-
-            ))}
+          {index === messages.length - 1 && (
+            <button onClick={regenerate}>
+              <RefreshCw size={13} /> Regenerate
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  </div>
+))}
 
             {busy && (
 
@@ -3483,15 +3463,8 @@ createRoot(
   document.getElementById('root')
 ).render(
 
-
-  
-  <><BrowserRouter>
+  <BrowserRouter>
     <App />
   </BrowserRouter>
-  <div className={`message-row ${message.role === "user" ? "user-row" : "ai-row"}`}>
-      <div className={`message-bubble ${message.role === "user" ? "user-bubble" : "ai-bubble"}`}>
-        {message.content}
-      </div>
-    </div></>
 
 );
