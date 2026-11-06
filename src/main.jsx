@@ -1728,15 +1728,26 @@ function saveConversation(userId, conversation) {
    AUTH PROTECTION
 ========================================================= */
 
-function Sparkles() {
+function NikoLogo({ size = 26, className = "" }) {
   return (
-    <div className="Sparkles">
+    <img
+      src="/logo.png"
+      alt="NIKO AI"
+      className={`niko-logo ${className}`}
+      style={{
+        width: size,
+        height: size,
+        objectFit: "contain"
+      }}
+    />
+  );
+}
+
+function Splash() {
+  return (
+    <div className="splash">
       <div className="logo-mark">
-        <img
-          src="/logo.png"
-          alt="NIKO AI"
-          onError={(e) => console.log("Logo not found:", e.currentTarget.src)}
-        />
+        <NikoLogo size={42} />
       </div>
       NIKO AI
     </div>
