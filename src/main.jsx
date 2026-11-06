@@ -3575,8 +3575,8 @@ function Voice() {
   const [active, setActive] = useState(false);
 
   // Hindi or English recognition
-  const [selectedLanguage, setSelectedLanguage] = useState('hi-IN');
-  const selectedLanguageRef = useRef('hi-IN');
+  const [selectedLanguage, setSelectedLanguage] = useState('en-IN');
+const selectedLanguageRef = useRef('en-IN');
 
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
@@ -4404,31 +4404,6 @@ IMPORTANT LANGUAGE RULES:
         </header>
 
         <main className="niko-voice-main">
-          <div className="niko-voice-intro">
-            <span className="niko-overline">
-              YOUR PERSONAL AI COMPANION
-            </span>
-
-            <h1>
-              {speaking ? "I'm speaking" :
-               thinking ? "One moment" :
-               "I'm listening"}
-              <span>.</span>
-            </h1>
-
-            <p>A conversation beyond the screen.</p>
-          </div>
-
-          {/* Language selector */}
-          <select
-            className="niko-language-select"
-            value={selectedLanguage}
-            onChange={e => changeLanguage(e.target.value)}
-            aria-label="Select recognition language"
-          >
-            <option value="hi-IN">Hindi</option>
-            <option value="en-IN">English</option>
-          </select>
 
           <div
             className={`niko-visualizer ${
