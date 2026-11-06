@@ -3085,49 +3085,182 @@ function Voice() {
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [caption, setCaption] = useState('');
-  const [status, setStatus] = useState('Tap the orb and start speaking');
-  const [language, setLanguage] = useState('en-IN');
+  const [status, setStatus] = useState('Tap Niko to begin');
 
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
   const historyRef = useRef([]);
   const serverIdRef = useRef('');
   const localIdRef = useRef(makeId());
+
+  const activeRef = useRef(false);
   const busyRef = useRef(false);
+  const mountedRef = useRef(true);
+  const restartTimerRef = useRef(null);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
+      mountedRef.current = false;
+      activeRef.current = false;
+
+      clearTimeout(restartTimerRef.current);
       recognitionRef.current?.stop();
       window.speechSynthesis?.cancel();
     };
   }, []);
 
+  function updateStatus(value) {
+    if (mountedRef.current) setStatus(value);
+  }
+
+  function startRecognition() {
+    if (!activeRef.current || busyRef.current) return;
+
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      updateStatus('Use Chrome or Edge for voice support');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+
+      // Hindi works best as the starting language for Hindi/Hinglish.
+      recognition.lang = 'hi-IN';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      transcriptRef.current = '';
+
+      recognition.onstart = () => {
+        if (!mountedRef.current) return;
+
+        setListening(true);
+        updateStatus('Listening...');
+      };
+
+      recognition.onresult = event => {
+        let finalText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+
+          if (result.isFinal) {
+            finalText += result[0].transcript + ' ';
+          }
+        }
+
+        if (finalText.trim()) {
+          transcriptRef.current += finalText;
+        }
+      };
+
+      recognition.onerror = event => {
+        console.error('Speech recognition:', event.error);
+        setListening(false);
+
+        if (event.error === 'not-allowed' ||
+            event.error === 'service-not-allowed') {
+          activeRef.current = false;
+          updateStatus('Microphone permission required');
+        }
+      };
+
+      recognition.onend = () => {
+        if (!mountedRef.current) return;
+
+        setListening(false);
+
+        const spokenText = transcriptRef.current.trim();
+        transcriptRef.current = '';
+
+        if (spokenText && activeRef.current) {
+          askNiko(spokenText);
+          return;
+        }
+
+        // Automatically listen again after silence.
+        if (activeRef.current && !busyRef.current) {
+          restartTimerRef.current = setTimeout(
+            startRecognition,
+            500
+          );
+        }
+      };
+
+      recognition.start();
+
+    } catch (error) {
+      console.error(error);
+
+      if (activeRef.current) {
+        restartTimerRef.current = setTimeout(
+          startRecognition,
+          1200
+        );
+      }
+    }
+  }
+
+  function activateNiko() {
+    if (activeRef.current) return;
+
+    activeRef.current = true;
+    updateStatus('Connecting microphone...');
+
+    startRecognition();
+  }
+
   function speakReply(message) {
     if (!('speechSynthesis' in window)) {
-      setStatus('Reply ready');
+      updateStatus('Reply ready');
+      startRecognition();
       return;
     }
 
     window.speechSynthesis.cancel();
 
+    const hasHindi = /[\u0900-\u097F]/.test(message);
+
     const utterance = new SpeechSynthesisUtterance(message);
-    utterance.lang = language;
+
+    utterance.lang = hasHindi ? 'hi-IN' : 'en-IN';
     utterance.rate = 1;
     utterance.pitch = 1;
 
     utterance.onstart = () => {
+      if (!mountedRef.current) return;
+
       setSpeaking(true);
-      setStatus('Niko is speaking');
+      updateStatus('Niko is speaking...');
     };
 
     utterance.onend = () => {
+      if (!mountedRef.current) return;
+
       setSpeaking(false);
-      setStatus('Tap the orb to speak again');
+
+      if (activeRef.current) {
+        updateStatus('Listening...');
+        startRecognition();
+      }
     };
 
     utterance.onerror = () => {
+      if (!mountedRef.current) return;
+
       setSpeaking(false);
-      setStatus('Reply ready');
+
+      if (activeRef.current) {
+        updateStatus('Listening...');
+        startRecognition();
+      }
     };
 
     window.speechSynthesis.speak(utterance);
@@ -3137,9 +3270,10 @@ function Voice() {
     if (!user?.id || busyRef.current) return;
 
     busyRef.current = true;
+
     setThinking(true);
     setCaption('');
-    setStatus('Niko is thinking...');
+    updateStatus('Niko is thinking...');
 
     const nextMessages = [
       ...historyRef.current,
@@ -3246,7 +3380,6 @@ function Voice() {
 
       historyRef.current = finalMessages;
 
-      // Save voice conversation in existing chat history.
       saveConversation(user.id, {
         id: localIdRef.current,
         serverId: result.conversationId,
@@ -3254,93 +3387,30 @@ function Voice() {
         messages: finalMessages
       });
 
-      // Show only Niko's reply, not your question.
-      setCaption(String(output));
-      setThinking(false);
+      // Only Niko's reply is visible.
+      if (mountedRef.current) {
+        setCaption(String(output));
+        setThinking(false);
+      }
 
+      busyRef.current = false;
       speakReply(String(output));
 
     } catch (error) {
       console.error('NIKO VOICE ERROR:', error);
-      setCaption(`Connection error: ${error.message}`);
-      setStatus('Something went wrong');
-      setThinking(false);
-    } finally {
-      busyRef.current = false;
-    }
-  }
 
-  function startListening() {
-    if (thinking || speaking || listening) return;
-
-    const SpeechRecognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setCaption(
-        'Speech recognition is not supported. Please use Chrome or Edge.'
-      );
-      return;
-    }
-
-    transcriptRef.current = '';
-
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-
-    recognition.lang = language;
-    recognition.interimResults = false;
-    recognition.continuous = false;
-
-    recognition.onstart = () => {
-      setListening(true);
-      setCaption('');
-      setStatus('Listening to you...');
-    };
-
-    recognition.onresult = event => {
-      const spokenText = Array.from(event.results)
-        .map(result => result[0].transcript)
-        .join(' ')
-        .trim();
-
-      transcriptRef.current = spokenText;
-    };
-
-    recognition.onerror = event => {
-      setListening(false);
-      setStatus(`Microphone error: ${event.error}`);
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-
-      const spokenText = transcriptRef.current.trim();
-      transcriptRef.current = '';
-
-      if (spokenText) {
-        askNiko(spokenText);
-      } else {
-        setStatus('I did not hear anything. Try again.');
+      if (mountedRef.current) {
+        setCaption(`Connection error: ${error.message}`);
+        setThinking(false);
+        updateStatus('Listening...');
       }
-    };
 
-    try {
-      recognition.start();
-    } catch (error) {
-      setListening(false);
-      setStatus('Could not start microphone. Try again.');
+      busyRef.current = false;
+
+      if (activeRef.current) {
+        startRecognition();
+      }
     }
-  }
-
-  function stopVoice() {
-    recognitionRef.current?.stop();
-    window.speechSynthesis?.cancel();
-
-    setListening(false);
-    setSpeaking(false);
-    setStatus('Voice stopped');
   }
 
   return (
@@ -3354,7 +3424,9 @@ function Voice() {
           ← Back to chat
         </button>
 
-        <span className="eyebrow">NIKO / VOICE ASSISTANT</span>
+        <span className="eyebrow">
+          NIKO / VOICE ASSISTANT
+        </span>
       </div>
 
       <div className="voice-center">
@@ -3365,16 +3437,16 @@ function Voice() {
             thinking ? 'is-thinking' :
             speaking ? 'is-speaking' : ''
           }`}
-          onClick={startListening}
+          onClick={activateNiko}
           role="button"
           tabIndex={0}
           onKeyDown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              startListening();
+              activateNiko();
             }
           }}
-          aria-label="Start talking to Niko"
+          aria-label="Activate Niko voice assistant"
         >
           <div className="orb-wave wave-one" />
           <div className="orb-wave wave-two" />
@@ -3392,8 +3464,7 @@ function Voice() {
         <div className="voice-caption">
           {thinking ? (
             <span className="caption-thinking">
-              Niko is preparing a reply
-              <span className="caption-dots">...</span>
+              Niko is thinking...
             </span>
           ) : caption ? (
             <>
@@ -3403,45 +3474,16 @@ function Voice() {
           ) : (
             <span className="caption-placeholder">
               {listening
-                ? 'Listening...'
-                : 'Your conversation will appear here'}
+                ? 'I am listening to you...'
+                : 'Tap the orb to start talking'}
             </span>
           )}
         </div>
 
-        <div className="voice-controls">
-
-          <button
-            className="voice-main-btn"
-            onClick={startListening}
-            disabled={listening || thinking || speaking}
-          >
-            {listening ? 'Listening...' : 'Start speaking'}
-          </button>
-
-          <button
-            className="voice-stop-btn"
-            onClick={stopVoice}
-            disabled={!listening && !speaking && !thinking}
-          >
-            Stop
-          </button>
-
-        </div>
-
-        <select
-          className="voice-language"
-          value={language}
-          onChange={e => setLanguage(e.target.value)}
-          disabled={listening || speaking || thinking}
-        >
-          <option value="en-IN">English (India)</option>
-          <option value="hi-IN">Hindi</option>
-          <option value="en-US">English (US)</option>
-        </select>
-
         <p className="voice-footer">
-          Speak naturally. Niko will listen and reply.
+          {activeRef.current
+            ? 'Talk naturally. Niko is listening.'
+            : 'Tap Niko once to activate voice mode.'}
         </p>
 
       </div>
