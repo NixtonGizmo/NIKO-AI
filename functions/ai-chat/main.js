@@ -510,46 +510,6 @@ if (!content) {
   );
 }
 
-    let aiData = {};
-
-    try {
-      aiData = await aiResponse.json();
-    } catch {
-      aiData = {};
-    }
-
-    if (!aiResponse.ok) {
-      log(
-        `AI provider request failed: HTTP ${aiResponse.status}`
-      );
-
-      return res.json(
-        {
-          error:
-            aiData?.error?.message ||
-            'AI provider request failed.',
-
-          provider_status: aiResponse.status
-        },
-
-        aiResponse.status >= 400 && aiResponse.status <= 599
-          ? aiResponse.status
-          : 502
-      );
-    }
-
-    const content =
-      aiData?.choices?.[0]?.message?.content;
-
-    if (typeof content !== 'string' || !content.trim()) {
-      return res.json(
-        {
-          error:
-            'AI provider returned an empty response.'
-        },
-        502
-      );
-    }
 
     /*
      * Save Niko's reply and update conversation timestamp.
