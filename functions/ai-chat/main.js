@@ -597,3 +597,15 @@ return res.json({
   conversationId,
   transliteratedUserText
 });
+
+  } catch (e) {
+    error(e?.stack || e?.message || String(e));
+
+    return res.json(
+      {
+        error: e?.message || 'Niko AI Function failed.'
+      },
+      500
+    );
+  }
+};
