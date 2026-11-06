@@ -3578,130 +3578,20 @@ function Voice() {
   const mountedRef = useRef(true);
   const restartTimerRef = useRef(null);
 
-  useEffect(() => {
-    mountedRef.current = true;
+ useEffect(() => {
+  mountedRef.current = true;
 
-    
-return (
-  <div className="niko-voice-screen">
+  return () => {
+    mountedRef.current = false;
 
-    <header className="niko-voice-header">
-      <button
-        className="niko-back"
-        onClick={() => navigate('/app/chat')}
-      >
-        <ArrowLeft size={18} />
-      </button>
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+    }
 
-      <div className="niko-brand">
-        <span className="niko-brand-icon">
-          <Sparkles size={17} />
-        </span>
-        <span>NIKO <small>VOICE</small></span>
-      </div>
-
-      <div className="voice-live-indicator">
-        <span />
-        LIVE
-      </div>
-    </header>
-
-    <main className="niko-voice-main">
-
-      <div className="niko-voice-intro">
-        <span className="niko-overline">
-          YOUR PERSONAL AI COMPANION
-        </span>
-        <h1>I'm listening<span>.</span></h1>
-        <p>A conversation beyond the screen.</p>
-      </div>
-
-      <div
-        className={`niko-visualizer ${
-          listening ? 'listening' :
-          thinking ? 'thinking' :
-          speaking ? 'speaking' : 'idle'
-        }`}
-        onClick={activateNiko}
-        role="button"
-        tabIndex={0}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            activateNiko();
-          }
-        }}
-      >
-        <div className="visualizer-ring ring-1" />
-        <div className="visualizer-ring ring-2" />
-        <div className="visualizer-ring ring-3" />
-
-        <div className="visualizer-particles">
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
-
-        <div className="niko-orb-core">
-          <div className="orb-glow" />
-          <Sparkles size={43} strokeWidth={1.4} />
-        </div>
-      </div>
-
-      <div className="niko-voice-state">
-        <span className="state-dot" />
-        {thinking
-          ? 'THINKING'
-          : speaking
-          ? 'SPEAKING'
-          : listening
-          ? 'LISTENING'
-          : 'READY'}
-      </div>
-
-      <div className="niko-caption-panel">
-        <div className="caption-heading">
-          <span className="caption-line" />
-          <span>NIKO'S RESPONSE</span>
-          <span className="caption-line" />
-        </div>
-
-        {thinking ? (
-          <div className="niko-thinking-text">
-            Finding the right words
-            <span className="thinking-animation">•••</span>
-          </div>
-        ) : caption ? (
-          <p className="niko-response-text">{caption}</p>
-        ) : (
-          <p className="niko-empty-caption">
-            {listening
-              ? 'Go ahead, I am listening.'
-              : 'Your conversation starts here.'}
-          </p>
-        )}
-      </div>
-
-      <div className="niko-voice-hint">
-        {activeRef.current
-          ? 'Speak naturally · Niko will respond automatically'
-          : 'Tap the orb once to start your conversation'}
-      </div>
-
-    </main>
-
-    <footer className="niko-voice-footer">
-      <span>POWERED BY NIKO AI</span>
-      <span>MADE TO LISTEN. BUILT TO THINK.</span>
-    </footer>
-
-  </div>
-);
-
-  }, []);
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+  };
+}, []);
 
   function updateStatus(value) {
     if (mountedRef.current) setStatus(value);
