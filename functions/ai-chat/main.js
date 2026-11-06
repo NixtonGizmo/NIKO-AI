@@ -434,35 +434,41 @@ IMPORTANT LANGUAGE RULES:
      * Send conversation to configured AI provider.
      */
     
-const aiResponse = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey
-    },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [
-          { text: systemPrompt }
-        ]
+let aiResponse;
+
+for (let attempt = 0; attempt < 3; attempt++) {
+  aiResponse = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
       },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        contents: messages.map((message) => ({
+          role: message.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: message.content }]
+        })),
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048
+        }
+      })
+    }
+  );
 
-      contents: messages.map((message) => ({
-        role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [
-          { text: message.content }
-        ]
-      })),
+  if (aiResponse.ok || aiResponse.status !== 503) break;
 
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 2048
-      }
-    })
+  if (attempt < 2) {
+    await new Promise(resolve =>
+      setTimeout(resolve, 1500 * (attempt + 1))
+    );
   }
-);
+}
 
 let aiData = {};
 
