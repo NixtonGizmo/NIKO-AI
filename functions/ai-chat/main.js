@@ -444,6 +444,13 @@ let providerUsed = 'Gemini';
 const groqApiKey = process.env.GROQ_API_KEY;
 
 // 1. Try Gemini first
+// 1. Try Gemini first (12-second timeout)
+const geminiController = new AbortController();
+
+const geminiTimeout = setTimeout(() => {
+  geminiController.abort();
+}, 12000);
+
 try {
   const aiResponse = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -463,9 +470,10 @@ try {
         })),
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 2048
+          maxOutputTokens: 512
         }
-      })
+      }),
+      signal: geminiController.signal
     }
   );
 
@@ -479,7 +487,9 @@ try {
       .join('')
       .trim();
 
-    if (!content) {
+    if (content) {
+      providerUsed = 'Gemini';
+    } else {
       geminiError = 'Gemini returned an empty response.';
     }
   } else {
@@ -488,7 +498,7 @@ try {
 
     log(`Gemini failed: ${geminiError}`);
 
-    // Only fall back for temporary or model availability errors.
+    // Return immediately for non-temporary errors.
     if (![404, 408, 429, 500, 502, 503, 504].includes(aiResponse.status)) {
       return res.json({
         error: geminiError,
@@ -496,14 +506,28 @@ try {
       }, aiResponse.status);
     }
   }
+
 } catch (err) {
-  geminiError = err.message;
+  geminiError = err.name === 'AbortError'
+    ? 'Gemini timed out after 12 seconds.'
+    : err.message;
+
   log(`Gemini connection error: ${geminiError}`);
+
+} finally {
+  clearTimeout(geminiTimeout);
 }
 
-// 2. Use Groq if Gemini failed
+
+// 2. Use Groq if Gemini failed (10-second timeout)
 if (!content && groqApiKey) {
   providerUsed = 'Groq';
+
+  const groqController = new AbortController();
+
+  const groqTimeout = setTimeout(() => {
+    groqController.abort();
+  }, 10000);
 
   try {
     const groqResponse = await fetch(
@@ -521,9 +545,10 @@ if (!content && groqApiKey) {
             ...messages
           ],
           temperature: 0.7,
-          max_tokens: 2048,
+          max_tokens: 1024,
           stream: false
-        })
+        }),
+        signal: groqController.signal
       }
     );
 
@@ -542,16 +567,28 @@ if (!content && groqApiKey) {
     content =
       groqData?.choices?.[0]?.message?.content?.trim() || '';
 
+    if (!content) {
+      log('Groq returned an empty response.');
+    }
+
   } catch (err) {
-    log(`Groq connection error: ${err.message}`);
+    const groqError = err.name === 'AbortError'
+      ? 'Groq timed out after 10 seconds.'
+      : err.message;
+
+    log(`Groq connection error: ${groqError}`);
 
     return res.json({
       error: 'Both Gemini and Groq are currently unavailable.',
       primary_error: geminiError,
-      backup_error: err.message
+      backup_error: groqError
     }, 502);
+
+  } finally {
+    clearTimeout(groqTimeout);
   }
 }
+
 
 // 3. Check final response
 if (!content) {
@@ -565,10 +602,6 @@ if (!content) {
 
 log(`Niko response generated using ${providerUsed}`);
 
-
-/*
- * Save Niko's reply and update conversation timestamp.
- */
 await saveMessage(
   conversationId,
   'assistant',

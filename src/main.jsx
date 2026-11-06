@@ -58,7 +58,8 @@ import {
   Mic,
   StopCircle,
   Pencil,
-  CircleHelp
+  CircleHelp,
+  FileDatabase
 } from 'lucide-react';
 
 
@@ -2963,7 +2964,7 @@ function Chat() {
 
             }),
 
-            async: true
+            async: False
 
           })
 
@@ -3978,7 +3979,7 @@ IMPORTANT LANGUAGE RULES:
                 ...nextMessages
               ]
             }),
-            async: ture
+            async: false
           })
         }
       );
