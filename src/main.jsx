@@ -385,7 +385,7 @@ button:disabled {
   object-fit: contain;
   border-radius: 12px;
 }
-  
+
 /* PAGE */
 
 .page {
@@ -1732,7 +1732,7 @@ function Splash() {
   return (
     <div className="splash">
       <div className="logo-mark">
-        <img src="/niko-logo.png" alt="Niko AI" />
+        <img src="public/niko-logo.png" alt="Niko AI" />
       </div>
       NIKO AI
     </div>
