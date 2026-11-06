@@ -41,12 +41,7 @@ export default async ({ req, res, log, error }) => {
      * Environment configuration.
      */
     const apiKey = process.env.AI_API_KEY;
-
-    const baseUrl = (
-      process.env.AI_BASE_URL || 'https://api.openai.com/v1'
-    ).replace(/\/$/, '');
-
-    const model = process.env.AI_MODEL || 'gpt-4.1-mini';
+const model = process.env.AI_MODEL || 'gemini-2.5-flash';
 
     const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
@@ -438,31 +433,82 @@ IMPORTANT LANGUAGE RULES:
     /*
      * Send conversation to configured AI provider.
      */
-    const aiResponse = await fetch(
-      `${baseUrl}/chat/completions`,
-      {
-        method: 'POST',
+    
+const aiResponse = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [
+          { text: systemPrompt }
+        ]
+      },
 
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
+      contents: messages.map((message) => ({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [
+          { text: message.content }
+        ]
+      })),
 
-        body: JSON.stringify({
-          model,
-
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt
-            },
-            ...messages
-          ],
-
-          stream: false
-        })
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048
       }
-    );
+    })
+  }
+);
+
+let aiData = {};
+
+try {
+  aiData = await aiResponse.json();
+} catch {
+  aiData = {};
+}
+
+if (!aiResponse.ok) {
+  log(`Gemini API failed: HTTP ${aiResponse.status}`);
+
+  return res.json(
+    {
+      error:
+        aiData?.error?.message ||
+        'Gemini API request failed.',
+      provider_status: aiResponse.status
+    },
+    aiResponse.status >= 400 && aiResponse.status <= 599
+      ? aiResponse.status
+      : 502
+  );
+}
+
+  const content = (
+        aiData?.candidates?.[0]?.content?.parts || []
+)
+  .map((part) => part.text || '')
+  .join('')
+  .trim();
+
+if (!content) {
+  log(
+    `Gemini returned no text. Block reason: ${
+      aiData?.promptFeedback?.blockReason || 'Unknown'
+    }`
+  );
+
+  return res.json(
+    {
+      error: 'Gemini returned an empty response. Please try again.'
+    },
+    502
+  );
+}
 
     let aiData = {};
 
