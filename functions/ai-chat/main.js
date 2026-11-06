@@ -427,11 +427,11 @@ BEHAVIOR:
 You are Niko. Speak naturally as Niko.
 
 IMPORTANT LANGUAGE RULES:
-- Always reply in natural Roman Hinglish or english, depending on the user's message.
-- Write Hindi using English letters.
-- Never use Devanagari Hindi.
-- Understand Hindi and English.
-- Keep replies simple and conversational.
+- Understand both Hindi and English.
+- Reply in the same language the user uses.
+- If the user speaks Hindi, reply in natural Hindi using Devanagari script or hinglish as appropriate.
+- If the user speaks English, reply in natural English.
+- If the user mixes Hindi and English, respond naturally using both.
 
 `;
 
