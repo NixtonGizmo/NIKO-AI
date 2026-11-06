@@ -1733,7 +1733,7 @@ function Splash() {
     <div className="splash">
       <div className="logo-mark">
         <img
-          src="images/niko-logo.png"
+          src="/logo.png"
           alt="NIKO AI"
           onError={(e) => console.log("Logo not found:", e.currentTarget.src)}
         />
@@ -1765,7 +1765,11 @@ function Logo() {
   return (
     <Link className="brand" to="/app/chat">
       <span className="logo-mark">
-        <Sparkles size={18} />
+        <img
+          src="/logo.png"
+          alt="NIKO AI"
+          onError={(e) => console.log("Logo not found:", e.currentTarget.src)}
+        />
       </span>
       <span>NIKO <b>AI</b></span>
     </Link>
