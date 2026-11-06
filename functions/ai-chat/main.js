@@ -451,6 +451,7 @@ const geminiTimeout = setTimeout(() => {
   geminiController.abort();
 }, 12000);
 
+
 try {
   const aiResponse = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -498,7 +499,6 @@ try {
 
     log(`Gemini failed: ${geminiError}`);
 
-    // Return immediately for non-temporary errors.
     if (![404, 408, 429, 500, 502, 503, 504].includes(aiResponse.status)) {
       return res.json({
         error: geminiError,
@@ -539,7 +539,7 @@ if (!content && groqApiKey) {
           Authorization: `Bearer ${groqApiKey}`
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'openai/gpt-oss-20b',
           messages: [
             { role: 'system', content: systemPrompt },
             ...messages
@@ -631,14 +631,14 @@ return res.json({
   transliteratedUserText
 });
 
-  } catch (e) {
-    error(e?.stack || e?.message || String(e));
+} catch (e) {
+  error(e?.stack || e?.message || String(e));
 
-    return res.json(
-      {
-        error: e?.message || 'Niko AI Function failed.'
-      },
-      500
-    );
-  }
+  return res.json(
+    {
+      error: e?.message || 'Niko AI Function failed.'
+    },
+    500
+  );
+}
 };
