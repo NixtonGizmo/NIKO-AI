@@ -3561,6 +3561,7 @@ function ChatHistory() {
 
 
 
+
 function Voice() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -3572,6 +3573,10 @@ function Voice() {
   const [userCaption, setUserCaption] = useState('');
   const [status, setStatus] = useState('Tap Niko to begin');
   const [active, setActive] = useState(false);
+
+  // Hindi or English recognition
+  const [selectedLanguage, setSelectedLanguage] = useState('hi-IN');
+  const selectedLanguageRef = useRef('hi-IN');
 
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
@@ -3585,8 +3590,6 @@ function Voice() {
   const mountedRef = useRef(true);
   const restartTimerRef = useRef(null);
   const silenceTimerRef = useRef(null);
-
-  // Hindi Devanagari to Roman Hinglish
 
   function updateStatus(value) {
     if (mountedRef.current) {
@@ -3637,6 +3640,22 @@ function Voice() {
     }, delay);
   }
 
+  // Change language while the conversation is active
+  function changeLanguage(language) {
+    selectedLanguageRef.current = language;
+    setSelectedLanguage(language);
+
+    if (activeRef.current) {
+      stopRecognition();
+      scheduleRestart(700);
+      updateStatus(
+        language === 'hi-IN'
+          ? 'Switching to Hindi...'
+          : 'Switching to English...'
+      );
+    }
+  }
+
   function processSpeech() {
     if (!activeRef.current || busyRef.current) return;
 
@@ -3649,14 +3668,11 @@ function Voice() {
 
     clearTimeout(silenceTimerRef.current);
 
-    if (!spokenText) {
-      return;
-    }
+    if (!spokenText) return;
 
     setUserCaption(spokenText);
 
     stopRecognition();
-
     askNiko(spokenText);
   }
 
@@ -3686,7 +3702,7 @@ function Voice() {
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
 
-      recognition.lang = selectedLanguage === 'english' ? 'en-IN' : 'hi-IN';
+      recognition.lang = selectedLanguageRef.current;
       recognition.continuous = true;
       recognition.interimResults = true;
 
@@ -3791,7 +3807,6 @@ function Voice() {
     setUserCaption('');
 
     updateStatus('Connecting microphone...');
-
     startRecognition();
   }
 
@@ -3815,6 +3830,7 @@ function Voice() {
     updateStatus('Voice session stopped');
   }
 
+  // Speak Hindi replies in Hindi and English replies in English
   function speakReply(message) {
     if (!('speechSynthesis' in window)) {
       updateStatus('Reply ready');
@@ -3824,24 +3840,31 @@ function Voice() {
 
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(
-      toHinglish(message)
-    );
+    const text = String(message);
+    const isHindi = /[\u0900-\u097F]/.test(text);
 
-    utterance.lang = 'hi-IN';
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.lang = isHindi ? 'hi-IN' : 'en-IN';
     utterance.rate = 0.92;
     utterance.pitch = 1;
 
     const voices = window.speechSynthesis.getVoices();
 
-    const hindiVoice = voices.find(
-      voice => voice.lang.toLowerCase() === 'hi-in'
-    ) || voices.find(
-      voice => voice.lang.toLowerCase().startsWith('hi')
-    );
+    const selectedVoice = isHindi
+      ? voices.find(
+          voice => voice.lang.toLowerCase() === 'hi-in'
+        ) || voices.find(
+          voice => voice.lang.toLowerCase().startsWith('hi')
+        )
+      : voices.find(
+          voice => voice.lang.toLowerCase() === 'en-in'
+        ) || voices.find(
+          voice => voice.lang.toLowerCase().startsWith('en')
+        );
 
-    if (hindiVoice) {
-      utterance.voice = hindiVoice;
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
     }
 
     utterance.onstart = () => {
@@ -3940,14 +3963,16 @@ function Voice() {
 You are Niko, a friendly AI voice assistant.
 
 IMPORTANT LANGUAGE RULES:
-- Always reply in natural Hinglish.
-- Write Hindi words using English/Roman letters.
-- Never use Devanagari Hindi script.
-- Mix simple English words naturally with Hindi.
+
 - Understand both Hindi and English.
+- Reply in the same language the user speaks.
+- If the user speaks Hindi, reply in natural Hindi using Devanagari script.
+- If the user speaks English, reply in natural English.
+- If the user mixes Hindi and English, respond naturally using both.
+- Never force Roman Hinglish.
 - Keep voice replies short, natural and conversational.
-- Example: "Haan, bilkul! Main tumhari help kar sakta hoon."
-- Do not reply in pure English unless the user specifically asks.
+- Do not translate English replies into Hindi.
+- Do not translate Hindi replies into Roman letters.
 `
                 },
                 ...nextMessages
@@ -3995,9 +4020,6 @@ IMPORTANT LANGUAGE RULES:
         result?.message ||
         '';
 
-        const romanCaption =
-  result?.transliteratedUserText || userText;
-
       if (!output) {
         throw new Error('Niko returned an empty response.');
       }
@@ -4014,7 +4036,7 @@ IMPORTANT LANGUAGE RULES:
         ...nextMessages,
         {
           role: 'assistant',
-          content: hinglishOutput
+          content: finalOutput
         }
       ];
 
@@ -4028,14 +4050,15 @@ IMPORTANT LANGUAGE RULES:
       });
 
       if (mountedRef.current) {
-        setCaption(romanCaption);
+        setCaption(finalOutput);
+        setUserCaption(userText);
         setThinking(false);
       }
 
       busyRef.current = false;
 
       if (activeRef.current) {
-        speakReply(hinglishOutput);
+        speakReply(finalOutput);
       }
 
     } catch (error) {
@@ -4212,6 +4235,7 @@ IMPORTANT LANGUAGE RULES:
         }
 
         .visualizer-particles { position: absolute; inset: 0; pointer-events: none; }
+
         .visualizer-particles i {
           position: absolute;
           width: 5px;
@@ -4305,6 +4329,18 @@ IMPORTANT LANGUAGE RULES:
           letter-spacing: 2px;
         }
 
+        .niko-language-select {
+          margin-top: 18px;
+          padding: 10px 16px;
+          border: 1px solid #d8c8b2;
+          border-radius: 25px;
+          background: #fffdf9;
+          color: #80603e;
+          font: 13px Arial,sans-serif;
+          outline: none;
+          cursor: pointer;
+        }
+
         @keyframes niko-pulse {
           0%,100% {transform:scale(.94);opacity:.45}
           50% {transform:scale(1.04);opacity:1}
@@ -4382,6 +4418,17 @@ IMPORTANT LANGUAGE RULES:
 
             <p>A conversation beyond the screen.</p>
           </div>
+
+          {/* Language selector */}
+          <select
+            className="niko-language-select"
+            value={selectedLanguage}
+            onChange={e => changeLanguage(e.target.value)}
+            aria-label="Select recognition language"
+          >
+            <option value="hi-IN">Hindi</option>
+            <option value="en-IN">English</option>
+          </select>
 
           <div
             className={`niko-visualizer ${
@@ -4464,7 +4511,7 @@ IMPORTANT LANGUAGE RULES:
 
           <div className="niko-voice-hint">
             {active
-              ? 'Speak naturally · 5 seconds silence to reply'
+              ? `Speak in ${selectedLanguage === 'hi-IN' ? 'Hindi' : 'English'} · 5 seconds silence to reply`
               : 'Tap the orb once to start your conversation'}
           </div>
 
@@ -4486,6 +4533,7 @@ IMPORTANT LANGUAGE RULES:
     </>
   );
 }
+
 
 
 
