@@ -379,6 +379,13 @@ button:disabled {
   display: none;
 }
 
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+}
+  
 /* PAGE */
 
 .page {
@@ -1009,6 +1016,12 @@ button:disabled {
     max-width: 88%;
     padding: 11px 14px;
   }
+}
+
+  .niko-logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
 }
 
 .profile-info {
@@ -1719,7 +1732,7 @@ function Splash() {
   return (
     <div className="splash">
       <div className="logo-mark">
-        <Sparkles size={26} />
+        <img src="/niko-logo.png" alt="Niko AI" />
       </div>
       NIKO AI
     </div>
