@@ -430,14 +430,22 @@ IMPORTANT LANGUAGE RULES:
 
 `;
 
-    /*
-     * Send conversation to configured AI provider.
-     */
-    
-let aiResponse;
 
-for (let attempt = 0; attempt < 3; attempt++) {
-  aiResponse = await fetch(
+/*
+ * Primary: Google Gemini
+ * Backup: Groq
+ */
+
+let content = '';
+let aiData = {};
+let geminiError = null;
+let providerUsed = 'Gemini';
+
+const groqApiKey = process.env.GROQ_API_KEY;
+
+// 1. Try Gemini first
+try {
+  const aiResponse = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: 'POST',
@@ -461,107 +469,131 @@ for (let attempt = 0; attempt < 3; attempt++) {
     }
   );
 
-  if (aiResponse.ok || aiResponse.status !== 503) break;
+  aiData = await aiResponse.json();
 
-  if (attempt < 2) {
-    await new Promise(resolve =>
-      setTimeout(resolve, 1500 * (attempt + 1))
+  if (aiResponse.ok) {
+    content = (
+      aiData?.candidates?.[0]?.content?.parts || []
+    )
+      .map((part) => part.text || '')
+      .join('')
+      .trim();
+
+    if (!content) {
+      geminiError = 'Gemini returned an empty response.';
+    }
+  } else {
+    geminiError =
+      aiData?.error?.message || `Gemini HTTP ${aiResponse.status}`;
+
+    log(`Gemini failed: ${geminiError}`);
+
+    // Only fall back for temporary or model availability errors.
+    if (![404, 408, 429, 500, 502, 503, 504].includes(aiResponse.status)) {
+      return res.json({
+        error: geminiError,
+        provider_status: aiResponse.status
+      }, aiResponse.status);
+    }
+  }
+} catch (err) {
+  geminiError = err.message;
+  log(`Gemini connection error: ${geminiError}`);
+}
+
+// 2. Use Groq if Gemini failed
+if (!content && groqApiKey) {
+  providerUsed = 'Groq';
+
+  try {
+    const groqResponse = await fetch(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqApiKey}`
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages
+          ],
+          temperature: 0.7,
+          max_tokens: 2048,
+          stream: false
+        })
+      }
     );
+
+    const groqData = await groqResponse.json();
+
+    if (!groqResponse.ok) {
+      log(`Groq failed: ${groqData?.error?.message || groqResponse.status}`);
+
+      return res.json({
+        error: groqData?.error?.message || 'Groq request failed.',
+        provider_status: groqResponse.status,
+        primary_error: geminiError
+      }, 502);
+    }
+
+    content =
+      groqData?.choices?.[0]?.message?.content?.trim() || '';
+
+  } catch (err) {
+    log(`Groq connection error: ${err.message}`);
+
+    return res.json({
+      error: 'Both Gemini and Groq are currently unavailable.',
+      primary_error: geminiError,
+      backup_error: err.message
+    }, 502);
   }
 }
 
-let aiData = {};
+// 3. Check final response
+if (!content) {
+  return res.json({
+    error: groqApiKey
+      ? 'Both AI providers returned an empty response.'
+      : 'Gemini failed. Please configure GROQ_API_KEY for backup.',
+    primary_error: geminiError
+  }, 502);
+}
+
+log(`Niko response generated using ${providerUsed}`);
+
+
+/*
+ * Save Niko's reply and update conversation timestamp.
+ */
+await saveMessage(
+  conversationId,
+  'assistant',
+  content
+);
 
 try {
-  aiData = await aiResponse.json();
-} catch {
-  aiData = {};
-}
-
-if (!aiResponse.ok) {
-  log(`Gemini API failed: HTTP ${aiResponse.status}`);
-
-  return res.json(
+  await appwriteRequest(
+    `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
+    'PATCH',
     {
-      error:
-        aiData?.error?.message ||
-        'Gemini API request failed.',
-      provider_status: aiResponse.status
-    },
-    aiResponse.status >= 400 && aiResponse.status <= 599
-      ? aiResponse.status
-      : 502
-  );
-}
-
-  const content = (
-        aiData?.candidates?.[0]?.content?.parts || []
-)
-  .map((part) => part.text || '')
-  .join('')
-  .trim();
-
-if (!content) {
-  log(
-    `Gemini returned no text. Block reason: ${
-      aiData?.promptFeedback?.blockReason || 'Unknown'
-    }`
-  );
-
-  return res.json(
-    {
-      error: 'Gemini returned an empty response. Please try again.'
-    },
-    502
-  );
-}
-
-
-    /*
-     * Save Niko's reply and update conversation timestamp.
-     */
-    await saveMessage(
-      conversationId,
-      'assistant',
-      content
-    );
-
-    try {
-      await appwriteRequest(
-        `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(conversationsTableId)}/rows/${encodeURIComponent(conversationId)}`,
-        'PATCH',
-        {
-          data: {
-            updatedAt: new Date().toISOString()
-          }
-        }
-      );
-    } catch (updateError) {
-      log(
-        `Conversation timestamp update failed: ${updateError.message}`
-      );
+      data: {
+        updatedAt: new Date().toISOString()
+      }
     }
+  );
+} catch (updateError) {
+  log(`Conversation timestamp update failed: ${updateError.message}`);
+}
 
-    /*
-     * Return successful response.
-     */
-    return res.json({
+/*
+ * Return successful response.
+ */
+return res.json({
   content,
   conversationId,
   transliteratedUserText
 });
-
-  } catch (e) {
-    error(
-      e?.stack || e?.message || String(e)
-    );
-
-    return res.json(
-      {
-        error:
-          e?.message || 'Niko AI Function failed.'
-      },
-      500
-    );
-  }
-};
