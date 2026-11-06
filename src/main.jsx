@@ -1551,6 +1551,585 @@ button:disabled {
   z-index: 2;
 }
 
+
+/* ========================================
+   NIKO AI — PREMIUM VOICE EXPERIENCE
+   Theme: Ivory / Espresso / Champagne Gold
+======================================== */
+
+.niko-voice-screen {
+  --nv-bg: #f6f1e8;
+  --nv-card: #fffdf8;
+  --nv-brown: #39291f;
+  --nv-muted: #97877a;
+  --nv-gold: #bd9560;
+  --nv-gold-light: #e6c99b;
+
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  color: var(--nv-brown);
+  background:
+    radial-gradient(ellipse at 50% 40%, #fffdf9 0%, transparent 52%),
+    var(--nv-bg);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+/* HEADER */
+
+.niko-voice-header {
+  height: 76px;
+  padding: 0 5%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(90, 65, 45, 0.09);
+  background: rgba(255, 253, 248, 0.55);
+  backdrop-filter: blur(16px);
+  z-index: 5;
+}
+
+.niko-back {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(70, 48, 32, 0.13);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--nv-brown);
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.niko-back:hover {
+  background: var(--nv-brown);
+  color: white;
+  transform: translateX(-3px);
+}
+
+.niko-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 3px;
+}
+
+.niko-brand small {
+  color: var(--nv-gold);
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin-left: 3px;
+}
+
+.niko-brand-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: white;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #493327, #9b7048);
+  box-shadow: 0 4px 12px rgba(57, 41, 31, 0.2);
+}
+
+.voice-live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #92744e;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.voice-live-indicator span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #75a77b;
+  box-shadow: 0 0 0 4px rgba(117, 167, 123, 0.13);
+  animation: liveBlink 1.8s infinite;
+}
+
+/* MAIN */
+
+.niko-voice-main {
+  width: 100%;
+  max-width: 1050px;
+  margin: auto;
+  padding: 45px 24px 35px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.niko-voice-intro {
+  margin-bottom: 22px;
+}
+
+.niko-overline {
+  color: var(--nv-gold);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 3.5px;
+}
+
+.niko-voice-intro h1 {
+  margin: 15px 0 8px;
+  color: var(--nv-brown);
+  font-family: Georgia, serif;
+  font-size: clamp(35px, 5vw, 55px);
+  font-weight: 400;
+  letter-spacing: -1.8px;
+}
+
+.niko-voice-intro h1 span {
+  color: var(--nv-gold);
+}
+
+.niko-voice-intro p {
+  margin: 0;
+  color: var(--nv-muted);
+  font-size: 14px;
+  letter-spacing: 0.3px;
+}
+
+/* ORB VISUALIZER */
+
+.niko-visualizer {
+  width: 290px;
+  height: 290px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 10px 0 5px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.niko-visualizer:focus-visible {
+  outline: 2px solid var(--nv-gold);
+  outline-offset: 8px;
+  border-radius: 50%;
+}
+
+.visualizer-ring {
+  position: absolute;
+  border: 1px solid rgba(189, 149, 96, 0.3);
+  border-radius: 50%;
+  pointer-events: none;
+  transition: 0.4s ease;
+}
+
+.ring-1 {
+  width: 185px;
+  height: 185px;
+}
+
+.ring-2 {
+  width: 235px;
+  height: 235px;
+  border-style: dashed;
+  animation: ringRotate 25s linear infinite;
+}
+
+.ring-3 {
+  width: 280px;
+  height: 280px;
+  border-color: rgba(189, 149, 96, 0.16);
+  animation: ringPulse 4s ease-in-out infinite;
+}
+
+.niko-orb-core {
+  width: 142px;
+  height: 142px;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  color: #fff6e8;
+  background:
+    radial-gradient(circle at 35% 25%, #b9956d, transparent 42%),
+    linear-gradient(145deg, #73523b, #38271f 75%);
+  box-shadow:
+    0 15px 45px rgba(65, 43, 29, 0.25),
+    inset 0 2px 10px rgba(255, 255, 255, 0.2),
+    0 0 45px rgba(189, 149, 96, 0.17);
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+}
+
+.orb-glow {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(255, 225, 180, 0.22);
+  border-radius: 50%;
+  box-shadow: inset 0 0 22px rgba(255, 222, 175, 0.12);
+}
+
+.niko-orb-core svg {
+  filter: drop-shadow(0 2px 7px rgba(255, 220, 170, 0.5));
+  animation: iconFloat 4s ease-in-out infinite;
+}
+
+.visualizer-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.visualizer-particles i {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--nv-gold);
+  box-shadow: 0 0 12px rgba(189, 149, 96, 0.7);
+}
+
+.visualizer-particles i:nth-child(1) {
+  top: 16%;
+  left: 48%;
+}
+
+.visualizer-particles i:nth-child(2) {
+  top: 36%;
+  right: 5%;
+}
+
+.visualizer-particles i:nth-child(3) {
+  bottom: 23%;
+  right: 17%;
+}
+
+.visualizer-particles i:nth-child(4) {
+  bottom: 13%;
+  left: 42%;
+}
+
+.visualizer-particles i:nth-child(5) {
+  top: 35%;
+  left: 7%;
+}
+
+.visualizer-particles i:nth-child(6) {
+  bottom: 28%;
+  left: 15%;
+}
+
+/* LISTENING STATE */
+
+.niko-visualizer.listening .niko-orb-core {
+  transform: scale(1.08);
+  box-shadow:
+    0 15px 50px rgba(65, 43, 29, 0.3),
+    0 0 0 12px rgba(189, 149, 96, 0.09),
+    0 0 65px rgba(189, 149, 96, 0.4);
+}
+
+.niko-visualizer.listening .ring-1 {
+  animation: listeningPulse 1.4s ease-in-out infinite;
+}
+
+.niko-visualizer.listening .ring-2 {
+  border-color: rgba(189, 149, 96, 0.65);
+  animation-duration: 7s;
+}
+
+.niko-visualizer.listening .ring-3 {
+  animation: listeningOuter 2s ease-out infinite;
+}
+
+/* THINKING STATE */
+
+.niko-visualizer.thinking .niko-orb-core {
+  animation: thinkingGlow 1.6s ease-in-out infinite alternate;
+}
+
+.niko-visualizer.thinking .ring-1,
+.niko-visualizer.thinking .ring-3 {
+  animation: ringPulse 1.5s ease-in-out infinite;
+}
+
+/* SPEAKING STATE */
+
+.niko-visualizer.speaking .niko-orb-core {
+  animation: speakingPulse 0.8s ease-in-out infinite alternate;
+}
+
+.niko-visualizer.speaking .ring-1 {
+  animation: listeningPulse 0.8s ease-in-out infinite;
+}
+
+.niko-visualizer.speaking .ring-2 {
+  animation-duration: 5s;
+  border-style: solid;
+}
+
+/* STATUS */
+
+.niko-voice-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 12px;
+  color: #9a7852;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 3px;
+}
+
+.state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b99565;
+  box-shadow: 0 0 10px rgba(189, 149, 96, 0.45);
+}
+
+.niko-visualizer.listening ~ .niko-voice-state .state-dot {
+  background: #6e9c72;
+  animation: liveBlink 1s infinite;
+}
+
+/* RESPONSE PANEL */
+
+.niko-caption-panel {
+  width: min(100%, 590px);
+  min-height: 120px;
+  margin-top: 32px;
+  padding: 22px 28px;
+  border: 1px solid rgba(120, 90, 65, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 253, 248, 0.72);
+  box-shadow: 0 12px 35px rgba(65, 43, 29, 0.045);
+  backdrop-filter: blur(12px);
+}
+
+.caption-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  color: var(--nv-gold);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 2.8px;
+}
+
+.caption-line {
+  width: 32px;
+  height: 1px;
+  background: rgba(189, 149, 96, 0.45);
+}
+
+.niko-response-text {
+  margin: 19px 0 2px;
+  color: #49372b;
+  font-family: Georgia, serif;
+  font-size: 18px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  animation: captionAppear 0.4s ease both;
+}
+
+.niko-empty-caption {
+  margin: 20px 0 2px;
+  color: #a39588;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.niko-thinking-text {
+  margin-top: 22px;
+  color: #8d755e;
+  font-family: Georgia, serif;
+  font-size: 16px;
+}
+
+.thinking-animation {
+  display: inline-block;
+  margin-left: 7px;
+  letter-spacing: 3px;
+  animation: thinkingDots 1.1s infinite;
+}
+
+/* HINT */
+
+.niko-voice-hint {
+  margin-top: 22px;
+  color: #a39588;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+/* FOOTER */
+
+.niko-voice-footer {
+  width: 100%;
+  min-height: 58px;
+  padding: 15px 5%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  border-top: 1px solid rgba(90, 65, 45, 0.09);
+  color: #a39485;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.7px;
+}
+
+/* ANIMATIONS */
+
+@keyframes liveBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes ringRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ringPulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes listeningPulse {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+@keyframes listeningOuter {
+  0% { transform: scale(0.95); opacity: 0.65; }
+  100% { transform: scale(1.12); opacity: 0.1; }
+}
+
+@keyframes thinkingGlow {
+  from { filter: brightness(0.9); transform: scale(0.98); }
+  to { filter: brightness(1.2); transform: scale(1.06); }
+}
+
+@keyframes speakingPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.09); }
+}
+
+@keyframes iconFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes captionAppear {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes thinkingDots {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* MOBILE */
+
+@media (max-width: 600px) {
+  .niko-voice-header {
+    height: 64px;
+    padding: 0 17px;
+  }
+
+  .niko-brand {
+    font-size: 13px;
+    letter-spacing: 2px;
+  }
+
+  .niko-brand-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .niko-voice-main {
+    padding: 38px 18px 28px;
+  }
+
+  .niko-voice-intro {
+    margin-bottom: 17px;
+  }
+
+  .niko-voice-intro h1 {
+    font-size: 38px;
+  }
+
+  .niko-voice-intro p {
+    font-size: 12px;
+  }
+
+  .niko-visualizer {
+    width: 250px;
+    height: 250px;
+    margin: 8px 0;
+  }
+
+  .ring-1 {
+    width: 160px;
+    height: 160px;
+  }
+
+  .ring-2 {
+    width: 205px;
+    height: 205px;
+  }
+
+  .ring-3 {
+    width: 245px;
+    height: 245px;
+  }
+
+  .niko-orb-core {
+    width: 125px;
+    height: 125px;
+  }
+
+  .niko-caption-panel {
+    margin-top: 25px;
+    padding: 20px 17px;
+    min-height: 112px;
+  }
+
+  .niko-response-text {
+    font-size: 16px;
+  }
+
+  .niko-voice-footer {
+    padding: 14px 16px;
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .niko-voice-screen *,
+  .niko-voice-screen *::before,
+  .niko-voice-screen *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
 /* MOBILE */
 
 @media (max-width: 600px) {
