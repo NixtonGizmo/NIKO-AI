@@ -3649,7 +3649,7 @@ function Voice() {
       stopRecognition();
       scheduleRestart(700);
       updateStatus(
-        language === 'hi-IN'
+        language === 'en-IN'
         ? 'Switching to English...'
         : 'Switching to Hindi...'  
       );
