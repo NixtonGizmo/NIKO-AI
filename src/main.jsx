@@ -3587,64 +3587,7 @@ function Voice() {
   const silenceTimerRef = useRef(null);
 
   // Hindi Devanagari to Roman Hinglish
-  function toHinglish(text) {
-    const map = {
-      'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee',
-      'उ': 'u', 'ऊ': 'oo', 'ऋ': 'ri',
-      'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au',
-
-      'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh',
-      'ङ': 'n', 'च': 'ch', 'छ': 'chh', 'ज': 'j',
-      'झ': 'jh', 'ञ': 'ny', 'ट': 't', 'ठ': 'th',
-      'ड': 'd', 'ढ': 'dh', 'ण': 'n',
-      'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh',
-      'न': 'n', 'प': 'p', 'फ': 'ph', 'ब': 'b',
-      'भ': 'bh', 'म': 'm', 'य': 'y', 'र': 'r',
-      'ल': 'l', 'व': 'v', 'श': 'sh', 'ष': 'sh',
-      'स': 's', 'ह': 'h', 'ळ': 'l',
-
-      'ा': 'aa', 'ि': 'i', 'ी': 'ee',
-      'ु': 'u', 'ू': 'oo', 'ृ': 'ri',
-      'े': 'e', 'ै': 'ai', 'ो': 'o',
-      'ौ': 'au', 'ं': 'n', 'ः': 'h',
-      'ँ': 'n', '्': '', '़': '',
-
-      '।': '.', '॥': '.',
-      '०': '0', '१': '1', '२': '2',
-      '३': '3', '४': '4', '५': '5',
-      '६': '6', '७': '7', '८': '8',
-      '९': '9'
-    };
-
-    let result = '';
-
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-
-      if (map[char] !== undefined) {
-        result += map[char];
-
-        // Add inherent vowel to consonants unless followed by
-        // a vowel sign or virama.
-        const consonants = 'कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहळ';
-
-        if (
-          consonants.includes(char) &&
-          i + 1 < text.length &&
-          !'ािीुूृेैोौ़्'.includes(text[i + 1])
-        ) {
-          result += 'a';
-        }
-      } else {
-        result += char;
-      }
-    }
-
-    return result
-      .replace(/aa+/g, 'aa')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
+  
 
   function updateStatus(value) {
     if (mountedRef.current) {
@@ -4053,8 +3996,6 @@ IMPORTANT LANGUAGE RULES:
         result?.message ||
         '';
 
-        const romanCaption =
-  result?.transliteratedUserText || userText;
 
       if (!output) {
         throw new Error('Niko returned an empty response.');
@@ -4086,9 +4027,10 @@ IMPORTANT LANGUAGE RULES:
       });
 
       if (mountedRef.current) {
-        setCaption(romanCaption);
-        setThinking(false);
-      }
+  setCaption(hinglishOutput);
+  setUserCaption(toHinglish(userText));
+  setThinking(false);
+}
 
       busyRef.current = false;
 
