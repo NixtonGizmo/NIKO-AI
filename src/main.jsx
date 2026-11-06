@@ -3650,8 +3650,8 @@ function Voice() {
       scheduleRestart(700);
       updateStatus(
         language === 'hi-IN'
-          ? 'Switching to Hindi...'
-          : 'Switching to English...'
+        ? 'Switching to English...'
+        : 'Switching to Hindi...'  
       );
     }
   }
