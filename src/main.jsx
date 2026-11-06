@@ -22,7 +22,7 @@ import {
 } from 'react-router-dom';
 
 import { supabase } from './lib/supabase';
-import './index.css';
+
 import {
   MessageSquare,
   History,
@@ -3578,387 +3578,127 @@ function Voice() {
   const mountedRef = useRef(true);
   const restartTimerRef = useRef(null);
 
-useEffect(() => {
-  mountedRef.current = true;
+  useEffect(() => {
+    mountedRef.current = true;
+return (
+  <div className="niko-voice-screen">
 
-  return (
-  <>
-    <style>{`
-      .niko-voice-screen {
-        min-height: 100vh;
-        width: 100%;
-        background: #f6f1e9;
-        color: #382b20;
-        display: flex;
-        flex-direction: column;
-        font-family: Georgia, serif;
-        overflow: hidden;
-      }
+    <header className="niko-voice-header">
+      <button
+        className="niko-back"
+        onClick={() => navigate('/app/chat')}
+      >
+        <ArrowLeft size={18} />
+      </button>
 
-      .niko-voice-header {
-        height: 76px;
-        padding: 0 6%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-bottom: 1px solid rgba(100, 75, 45, .12);
-      }
+      <div className="niko-brand">
+        <span className="niko-brand-icon">
+          <Sparkles size={17} />
+        </span>
+        <span>NIKO <small>VOICE</small></span>
+      </div>
 
-      .niko-back {
-        background: transparent;
-        border: 1px solid #d8c8b2;
-        border-radius: 30px;
-        padding: 10px 17px;
-        color: #59442f;
-        cursor: pointer;
-      }
+      <div className="voice-live-indicator">
+        <span />
+        LIVE
+      </div>
+    </header>
 
-      .niko-brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 17px;
-        font-weight: bold;
-        letter-spacing: 3px;
-      }
+    <main className="niko-voice-main">
 
-      .niko-brand small {
-        color: #a17d50;
-        font-size: 11px;
-      }
+      <div className="niko-voice-intro">
+        <span className="niko-overline">
+          YOUR PERSONAL AI COMPANION
+        </span>
+        <h1>I'm listening<span>.</span></h1>
+        <p>A conversation beyond the screen.</p>
+      </div>
 
-      .niko-brand-icon {
-        color: #ad8754;
-      }
+      <div
+        className={`niko-visualizer ${
+          listening ? 'listening' :
+          thinking ? 'thinking' :
+          speaking ? 'speaking' : 'idle'
+        }`}
+        onClick={activateNiko}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            activateNiko();
+          }
+        }}
+      >
+        <div className="visualizer-ring ring-1" />
+        <div className="visualizer-ring ring-2" />
+        <div className="visualizer-ring ring-3" />
 
-      .voice-live-indicator {
-        color: #8b765c;
-        font: 11px Arial, sans-serif;
-        letter-spacing: 2px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .voice-live-indicator span,
-      .state-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #a98a5d;
-        display: inline-block;
-        box-shadow: 0 0 10px #c5a779;
-      }
-
-      .niko-voice-main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 35px 20px;
-        text-align: center;
-      }
-
-      .niko-overline {
-        color: #a38764;
-        font: 10px Arial, sans-serif;
-        letter-spacing: 4px;
-      }
-
-      .niko-voice-intro h1 {
-        font-size: clamp(34px, 5vw, 54px);
-        font-weight: 400;
-        margin: 15px 0 8px;
-      }
-
-      .niko-voice-intro h1 span {
-        color: #b18a58;
-      }
-
-      .niko-voice-intro p {
-        color: #8c7b68;
-        font: 14px Arial, sans-serif;
-      }
-
-      .niko-visualizer {
-        width: 260px;
-        height: 260px;
-        margin: 35px auto 20px;
-        position: relative;
-        display: grid;
-        place-items: center;
-        cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-      }
-
-      .visualizer-ring {
-        position: absolute;
-        border: 1px solid rgba(171, 133, 82, .3);
-        border-radius: 50%;
-        animation: niko-pulse 4s ease-in-out infinite;
-      }
-
-      .ring-1 {
-        width: 170px;
-        height: 170px;
-      }
-
-      .ring-2 {
-        width: 215px;
-        height: 215px;
-        animation-delay: .6s;
-      }
-
-      .ring-3 {
-        width: 255px;
-        height: 255px;
-        animation-delay: 1.2s;
-      }
-
-      .niko-orb-core {
-        width: 125px;
-        height: 125px;
-        border-radius: 50%;
-        background: radial-gradient(circle at 35% 30%, #e8d5b5, #b28c5e 65%, #80603e);
-        display: grid;
-        place-items: center;
-        color: #fff9ef;
-        position: relative;
-        box-shadow: 0 10px 50px rgba(139, 103, 60, .3);
-        transition: transform .3s, box-shadow .3s;
-      }
-
-      .niko-visualizer:hover .niko-orb-core {
-        transform: scale(1.06);
-      }
-
-      .orb-glow {
-        position: absolute;
-        inset: -12px;
-        border: 1px solid rgba(174, 136, 83, .35);
-        border-radius: 50%;
-      }
-
-      .niko-visualizer.listening .niko-orb-core {
-        box-shadow: 0 0 55px rgba(179, 139, 81, .6);
-        animation: niko-listen 1.5s ease-in-out infinite;
-      }
-
-      .niko-visualizer.thinking .niko-orb-core {
-        animation: niko-think 1s linear infinite;
-      }
-
-      .niko-visualizer.speaking .niko-orb-core {
-        animation: niko-speak .8s ease-in-out infinite alternate;
-      }
-
-      .visualizer-particles i {
-        position: absolute;
-        width: 5px;
-        height: 5px;
-        background: #b18a58;
-        border-radius: 50%;
-      }
-
-      .visualizer-particles i:nth-child(1) { top: 10%; left: 48%; }
-      .visualizer-particles i:nth-child(2) { top: 28%; right: 4%; }
-      .visualizer-particles i:nth-child(3) { bottom: 20%; right: 12%; }
-      .visualizer-particles i:nth-child(4) { bottom: 8%; left: 45%; }
-      .visualizer-particles i:nth-child(5) { top: 28%; left: 5%; }
-      .visualizer-particles i:nth-child(6) { bottom: 25%; left: 10%; }
-
-      .niko-voice-state {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        color: #9b7b52;
-        font: 11px Arial, sans-serif;
-        letter-spacing: 3px;
-      }
-
-      .niko-caption-panel {
-        width: min(540px, 90%);
-        min-height: 115px;
-        margin-top: 30px;
-        padding: 20px;
-        border: 1px solid #e3d7c7;
-        border-radius: 15px;
-        background: rgba(255, 253, 249, .7);
-        box-sizing: border-box;
-      }
-
-      .caption-heading {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 12px;
-        color: #a1845e;
-        font: 10px Arial, sans-serif;
-        letter-spacing: 2px;
-      }
-
-      .caption-line {
-        width: 30px;
-        height: 1px;
-        background: #d8c4a7;
-      }
-
-      .niko-response-text {
-        color: #51402f;
-        font: 15px/1.7 Arial, sans-serif;
-        margin: 18px 0 0;
-      }
-
-      .niko-empty-caption,
-      .niko-thinking-text {
-        color: #96836e;
-        font: 14px Arial, sans-serif;
-        margin-top: 20px;
-      }
-
-      .thinking-animation {
-        margin-left: 7px;
-        animation: niko-dots 1s infinite;
-      }
-
-      .niko-voice-hint {
-        color: #9a8a77;
-        font: 12px Arial, sans-serif;
-        margin-top: 22px;
-      }
-
-      .niko-voice-footer {
-        display: flex;
-        justify-content: space-between;
-        padding: 20px 6%;
-        color: #a18c73;
-        border-top: 1px solid rgba(100, 75, 45, .12);
-        font: 9px Arial, sans-serif;
-        letter-spacing: 2px;
-      }
-
-      @keyframes niko-pulse {
-        0%, 100% { transform: scale(.94); opacity: .45; }
-        50% { transform: scale(1.04); opacity: 1; }
-      }
-
-      @keyframes niko-listen {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.09); }
-      }
-
-      @keyframes niko-think {
-        to { transform: rotate(360deg); }
-      }
-
-      @keyframes niko-speak {
-        from { transform: scale(1); }
-        to { transform: scale(1.12); }
-      }
-
-      @keyframes niko-dots {
-        0%, 100% { opacity: .3; }
-        50% { opacity: 1; }
-      }
-
-      @media (max-width: 600px) {
-        .niko-voice-header { padding: 0 16px; }
-        .niko-visualizer { transform: scale(.88); margin: 15px auto; }
-        .niko-voice-main { padding: 25px 12px; }
-        .niko-voice-footer { font-size: 8px; padding: 15px; }
-      }
-    `}</style>
-
-    <div className="niko-voice-screen">
-      <header className="niko-voice-header">
-        <button className="niko-back" onClick={() => navigate('/app/chat')}>
-          ← Back
-        </button>
-
-        <div className="niko-brand">
-          <span className="niko-brand-icon"><Sparkles size={17} /></span>
-          <span>NIKO <small>VOICE</small></span>
+        <div className="visualizer-particles">
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
         </div>
 
-        <div className="voice-live-indicator">
-          <span /> LIVE
+        <div className="niko-orb-core">
+          <div className="orb-glow" />
+          <Sparkles size={43} strokeWidth={1.4} />
         </div>
-      </header>
+      </div>
 
-      <main className="niko-voice-main">
-        <div className="niko-voice-intro">
-          <span className="niko-overline">YOUR PERSONAL AI COMPANION</span>
-          <h1>I'm listening<span>.</span></h1>
-          <p>A conversation beyond the screen.</p>
+      <div className="niko-voice-state">
+        <span className="state-dot" />
+        {thinking
+          ? 'THINKING'
+          : speaking
+          ? 'SPEAKING'
+          : listening
+          ? 'LISTENING'
+          : 'READY'}
+      </div>
+
+      <div className="niko-caption-panel">
+        <div className="caption-heading">
+          <span className="caption-line" />
+          <span>NIKO'S RESPONSE</span>
+          <span className="caption-line" />
         </div>
 
-        <div
-          className={`niko-visualizer ${listening ? 'listening' : thinking ? 'thinking' : speaking ? 'speaking' : 'idle'}`}
-          onClick={activateNiko}
-          role="button"
-          tabIndex={0}
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              activateNiko();
-            }
-          }}
-          aria-label="Activate Niko voice assistant"
-        >
-          <div className="visualizer-ring ring-1" />
-          <div className="visualizer-ring ring-2" />
-          <div className="visualizer-ring ring-3" />
-          <div className="visualizer-particles">
-            <i /><i /><i /><i /><i /><i />
+        {thinking ? (
+          <div className="niko-thinking-text">
+            Finding the right words
+            <span className="thinking-animation">•••</span>
           </div>
-          <div className="niko-orb-core">
-            <div className="orb-glow" />
-            <Sparkles size={43} strokeWidth={1.4} />
-          </div>
-        </div>
+        ) : caption ? (
+          <p className="niko-response-text">{caption}</p>
+        ) : (
+          <p className="niko-empty-caption">
+            {listening
+              ? 'Go ahead, I am listening.'
+              : 'Your conversation starts here.'}
+          </p>
+        )}
+      </div>
 
-        <div className="niko-voice-state">
-          <span className="state-dot" />
-          {thinking ? 'THINKING' : speaking ? 'SPEAKING' : listening ? 'LISTENING' : 'READY'}
-        </div>
+      <div className="niko-voice-hint">
+        {activeRef.current
+          ? 'Speak naturally · Niko will respond automatically'
+          : 'Tap the orb once to start your conversation'}
+      </div>
 
-        <div className="niko-caption-panel">
-          <div className="caption-heading">
-            <span className="caption-line" />
-            <span>NIKO'S RESPONSE</span>
-            <span className="caption-line" />
-          </div>
+    </main>
 
-          {thinking ? (
-            <div className="niko-thinking-text">
-              Niko is thinking <span className="thinking-animation">•••</span>
-            </div>
-          ) : caption ? (
-            <p className="niko-response-text">{caption}</p>
-          ) : (
-            <p className="niko-empty-caption">
-              {listening ? 'Go ahead, I am listening.' : 'Tap the orb once to start talking.'}
-            </p>
-          )}
-        </div>
+    <footer className="niko-voice-footer">
+      <span>POWERED BY NIKO AI</span>
+      <span>MADE TO LISTEN. BUILT TO THINK.</span>
+    </footer>
 
-        <div className="niko-voice-hint">
-          {activeRef.current
-            ? 'Speak naturally · Niko will respond automatically'
-            : 'Tap the orb once to start your conversation'}
-        </div>
-      </main>
-
-      <footer className="niko-voice-footer">
-        <span>POWERED BY NIKO AI</span>
-        <span>MADE TO LISTEN. BUILT TO THINK.</span>
-      </footer>
-    </div>
-  </>
+  </div>
 );
-
-}, []);
+  }, []);
 
   function updateStatus(value) {
     if (mountedRef.current) setStatus(value);
@@ -3981,7 +3721,7 @@ useEffect(() => {
       recognitionRef.current = recognition;
 
       // Hindi works best as the starting language for Hindi/Hinglish.
-      recognition.lang = 'en-IN';
+      recognition.lang = 'hi-IN';
       recognition.continuous = false;
       recognition.interimResults = true;
 
@@ -4075,10 +3815,11 @@ useEffect(() => {
 
     window.speechSynthesis.cancel();
 
+    const hasHindi = /[\u0900-\u097F]/.test(message);
 
     const utterance = new SpeechSynthesisUtterance(message);
 
-utterance.lang = 'en-IN';;
+    utterance.lang = hasHindi ? 'hi-IN' : 'en-IN';
     utterance.rate = 1;
     utterance.pitch = 1;
 
