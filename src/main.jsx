@@ -953,6 +953,64 @@ button:disabled {
   font-size: 12px;
 }
 
+.message-row {
+  display: flex;
+  width: 100%;
+  margin: 14px 0;
+}
+
+.user-row {
+  justify-content: flex-end;
+}
+
+.ai-row {
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  width: fit-content;
+  max-width: min(78%, 720px);
+  min-width: 90px;
+  padding: 13px 17px;
+  border-radius: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.user-bubble {
+  margin-left: auto;
+  background: #e9dfcf;
+  color: #332719;
+  border: 1px solid #e0d3c0;
+  border-bottom-right-radius: 5px;
+}
+
+.ai-bubble {
+  margin-right: auto;
+  background: #f8f5ef;
+  color: #332719;
+  border: 1px solid #e9e1d5;
+  border-bottom-left-radius: 5px;
+}
+
+.message-bubble .role {
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: var(--gold);
+}
+
+.message-bubble .content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .message-bubble {
+    max-width: 88%;
+    padding: 11px 14px;
+  }
+}
+
 .profile-info {
   margin-top: 25px;
   border: 1px solid var(--border);
