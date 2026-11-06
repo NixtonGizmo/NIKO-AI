@@ -1728,9 +1728,9 @@ function saveConversation(userId, conversation) {
    AUTH PROTECTION
 ========================================================= */
 
-function Splash() {
+function Sparkles() {
   return (
-    <div className="splash">
+    <div className="Sparkles">
       <div className="logo-mark">
         <img
           src="/logo.png"
