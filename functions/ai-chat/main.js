@@ -174,6 +174,9 @@ export default async ({ req, res, log, error }) => {
       );
     }
 
+const transliteratedUserText =
+  await transliterateToRoman(latestUserMessage.content);
+
     /*
      * Generate an Appwrite-compatible row ID.
      */
@@ -266,6 +269,53 @@ export default async ({ req, res, log, error }) => {
 
       return id;
     }
+
+
+    
+async function transliterateToRoman(text) {
+  const apiKey = process.env.APIHIVER_API_KEY;
+
+  if (!text || !apiKey) {
+    return text || "";
+  }
+
+  // Skip API calls for text that is already in Roman script.
+  if (!/[\u0900-\u097F]/.test(text)) {
+    return text;
+  }
+
+  try {
+    const response = await fetch(
+      "https://language-detection.p.apihiver.com/v1/transliterate",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-API-Key": apiKey
+        },
+        body: JSON.stringify({
+          text: text
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      log(`APIHiver failed: HTTP ${response.status}`);
+      return text;
+    }
+
+    return typeof data.output === "string"
+      ? data.output
+      : text;
+
+  } catch (err) {
+    log(`Transliteration error: ${err.message}`);
+    return text;
+  }
+}
 
     /*
      * Save one message row.
@@ -476,9 +526,10 @@ You are Niko. Speak naturally as Niko.
      * Return successful response.
      */
     return res.json({
-      content,
-      conversationId
-    });
+  content,
+  conversationId,
+  transliteratedUserText
+});
 
   } catch (e) {
     error(
